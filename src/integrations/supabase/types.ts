@@ -9,7 +9,146 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      memories: {
+        Row: {
+          author_id: string
+          category: string | null
+          content: string | null
+          created_at: string
+          date: string
+          id: string
+          is_private: boolean | null
+          media_type: string | null
+          media_url: string | null
+          shared_with: string[] | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          category?: string | null
+          content?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          is_private?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          shared_with?: string[] | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          category?: string | null
+          content?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          is_private?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          shared_with?: string[] | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memories_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+        }
+        Insert: {
+          avatar?: string | null
+          created_at?: string
+          email: string
+          id: string
+          name: string
+        }
+        Update: {
+          avatar?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      prompts: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          question: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          question: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          question?: string
+        }
+        Relationships: []
+      }
+      tags: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

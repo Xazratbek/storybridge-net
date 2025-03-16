@@ -38,3 +38,10 @@ export type Tag = {
   id: string;
   name: string;
 };
+
+export type Profile = {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+};

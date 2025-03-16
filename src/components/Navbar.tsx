@@ -1,4 +1,5 @@
 
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,16 +11,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getCurrentUser, logoutUser } from "@/utils/authUtils";
 import { useNavigate } from "react-router-dom";
 import { BookOpen, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { getCurrentUser, logoutUser } from "@/utils/authUtils";
+import { useToast } from "@/components/ui/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
+  const { toast } = useToast();
+
+  // Fetch current user with React Query
+  const { data: currentUser, refetch } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: getCurrentUser,
+  });
   
   const handleLogout = async () => {
     await logoutUser();
+    refetch();
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out.",
+    });
     navigate("/");
   };
   
@@ -48,13 +62,16 @@ const Navbar = () => {
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={currentUser.avatar || "/placeholder.svg"} alt={currentUser.name} />
                     <AvatarFallback className="bg-memory-light text-memory-dark">
-                      {currentUser.name.substring(0, 2).toUpperCase()}
+                      {currentUser.name?.substring(0, 2).toUpperCase() || "MN"}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuItem className="text-sm opacity-50">
+                  {currentUser.email}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate("/profile")}>
                   <UserIcon className="mr-2 h-4 w-4" />

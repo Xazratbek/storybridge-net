@@ -9,49 +9,26 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Memory, Prompt } from "@/types";
-import { CalendarIcon, X, Mic, Video, Save } from "lucide-react";
+import { Prompt } from "@/types";
+import { CalendarIcon, X, Mic, Video, Save, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import Navbar from "@/components/Navbar";
 import { useToast } from "@/components/ui/use-toast";
+import { 
+  fetchMemoryById, 
+  createMemory, 
+  updateMemory, 
+  uploadFile, 
+  fetchPrompts 
+} from "@/utils/supabaseUtils";
 import { getCurrentUser } from "@/utils/authUtils";
-
-// MOCK DATA - In a real app, this would come from an API
-const MOCK_MEMORIES: Memory[] = [];
-const MOCK_PROMPTS: Prompt[] = [
-  {
-    id: "1",
-    question: "What is your favorite family tradition?",
-    category: "family",
-  },
-  {
-    id: "2",
-    question: "Describe a time when you overcame a significant challenge.",
-    category: "personal",
-  },
-  {
-    id: "3",
-    question: "What was your childhood home like?",
-    category: "childhood",
-  },
-  {
-    id: "4",
-    question: "Share a story your grandparents told you.",
-    category: "family",
-  },
-  {
-    id: "5",
-    question: "What's the most valuable life lesson you've learned?",
-    category: "personal",
-  },
-];
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 const MemoryForm = () => {
   const { id, promptId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const currentUser = getCurrentUser();
   
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -59,36 +36,90 @@ const MemoryForm = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [category, setCategory] = useState("Uncategorized");
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(true);
   const [mediaType, setMediaType] = useState<"text" | "audio" | "video">("text");
-  
-  // Get memory by ID if we're editing
+  const [file, setFile] = useState<File | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string | undefined>();
+
+  // Fetch current user
+  const { data: currentUser, isLoading: isLoadingUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: getCurrentUser,
+  });
+
+  // Redirect if not authenticated
   useEffect(() => {
-    if (id) {
-      // In a real app, we would fetch this from the backend
-      const memoryToEdit = MOCK_MEMORIES.find(m => m.id === id);
-      if (memoryToEdit) {
-        setTitle(memoryToEdit.title);
-        setContent(memoryToEdit.content);
-        setDate(new Date(memoryToEdit.date));
-        setTags(memoryToEdit.tags);
-        setCategory(memoryToEdit.category);
-        setIsPrivate(memoryToEdit.isPrivate);
-        setMediaType(memoryToEdit.mediaType);
-      }
+    if (!isLoadingUser && !currentUser) {
+      toast({
+        title: "Not logged in",
+        description: "Please log in to save memories",
+        variant: "destructive",
+      });
+      navigate("/login");
     }
-  }, [id]);
-  
+  }, [currentUser, isLoadingUser, navigate, toast]);
+
+  // Fetch prompts
+  const { data: prompts } = useQuery({
+    queryKey: ['prompts'],
+    queryFn: fetchPrompts,
+  });
+
+  // Fetch memory if editing
+  const { data: memory, isLoading: isLoadingMemory } = useQuery({
+    queryKey: ['memory', id],
+    queryFn: () => id ? fetchMemoryById(id) : null,
+    enabled: !!id,
+  });
+
+  // Create/update memory mutation
+  const memoryMutation = useMutation({
+    mutationFn: async (formData: any) => {
+      if (id) {
+        return updateMemory(formData);
+      } else {
+        return createMemory(formData);
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: id ? "Memory updated" : "Memory saved",
+        description: "Your memory has been successfully saved.",
+      });
+      navigate("/dashboard");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save memory",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Set form data if editing existing memory
+  useEffect(() => {
+    if (memory) {
+      setTitle(memory.title);
+      setContent(memory.content);
+      setDate(memory.date ? new Date(memory.date) : new Date());
+      setTags(memory.tags);
+      setCategory(memory.category);
+      setIsPrivate(memory.isPrivate);
+      setMediaType(memory.mediaType);
+      setMediaUrl(memory.mediaUrl);
+    }
+  }, [memory]);
+
   // Set content from prompt if we have a promptId
   useEffect(() => {
-    if (promptId) {
-      const selectedPrompt = MOCK_PROMPTS.find(p => p.id === promptId);
+    if (promptId && prompts) {
+      const selectedPrompt = prompts.find(p => p.id === promptId);
       if (selectedPrompt) {
         setTitle(`Response to: ${selectedPrompt.question}`);
       }
     }
-  }, [promptId]);
+  }, [promptId, prompts]);
   
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
@@ -101,6 +132,12 @@ const MemoryForm = () => {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
   
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -123,48 +160,53 @@ const MemoryForm = () => {
       return;
     }
     
-    setIsLoading(true);
+    let finalMediaUrl = mediaUrl;
     
-    try {
-      // In a real app, we would send this data to a backend API
-      // For now, we'll just simulate success
-      
-      const newMemory: Memory = {
-        id: id || String(Date.now()),
-        title,
-        content,
-        date: date.toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        tags,
-        category,
-        mediaType,
-        isPrivate,
-        authorId: currentUser.id,
-        sharedWith: [],
-      };
-      
-      // In a real app, we would save this to a database
-      console.log("Memory saved:", newMemory);
-      
-      toast({
-        title: id ? "Memory updated" : "Memory saved",
-        description: "Your memory has been successfully saved.",
-      });
-      
-      // Go back to dashboard
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("Error saving memory:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save memory. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+    // Upload file if provided
+    if (file && (mediaType === "audio" || mediaType === "video")) {
+      const uploadedUrl = await uploadFile(file, mediaType);
+      if (uploadedUrl) {
+        finalMediaUrl = uploadedUrl;
+      }
     }
+    
+    const memoryData = {
+      id: id || "",
+      title,
+      content,
+      date: date ? date.toISOString() : new Date().toISOString(),
+      tags,
+      category,
+      mediaType,
+      mediaUrl: finalMediaUrl,
+      isPrivate,
+      authorId: currentUser.id,
+      sharedWith: [],
+      createdAt: "",
+      updatedAt: "",
+    };
+    
+    memoryMutation.mutate(memoryData);
   };
+  
+  // Handle loading states
+  if (isLoadingUser || (id && isLoadingMemory)) {
+    return (
+      <div className="min-h-screen bg-memory-paper bg-paper-texture">
+        <Navbar />
+        <div className="container py-8">
+          <Card className="border-memory-light shadow-md max-w-3xl mx-auto">
+            <CardContent className="p-8 text-center">
+              <div className="animate-pulse">
+                <div className="h-6 bg-memory-light/40 rounded w-1/2 mx-auto mb-4"></div>
+                <div className="h-4 bg-memory-light/40 rounded w-3/4 mx-auto"></div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="min-h-screen bg-memory-paper bg-paper-texture">
@@ -233,16 +275,82 @@ const MemoryForm = () => {
               )}
               
               {mediaType === "audio" && (
-                <div className="space-y-2 p-6 border-2 border-dashed rounded-md border-memory-light text-center">
-                  <p className="text-muted-foreground">Audio recording is not available in this demo version.</p>
-                  <p className="text-sm text-muted-foreground">In the full version, you'll be able to record or upload audio memories.</p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="content">Memory Details</Label>
+                    <Textarea
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Provide a description for your audio memory..."
+                      className="min-h-[100px]"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="audio">Audio File</Label>
+                    <div className="border-2 border-dashed rounded-md border-memory-light p-4">
+                      <Input
+                        id="audio"
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <label htmlFor="audio" className="cursor-pointer">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Upload className="h-6 w-6 text-memory-dark" />
+                          <span className="text-sm text-center">
+                            {file ? file.name : "Click to upload audio file"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            MP3, WAV or M4A (max 20MB)
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               )}
               
               {mediaType === "video" && (
-                <div className="space-y-2 p-6 border-2 border-dashed rounded-md border-memory-light text-center">
-                  <p className="text-muted-foreground">Video upload is not available in this demo version.</p>
-                  <p className="text-sm text-muted-foreground">In the full version, you'll be able to upload video memories.</p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="content">Memory Details</Label>
+                    <Textarea
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Provide a description for your video memory..."
+                      className="min-h-[100px]"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="video">Video File</Label>
+                    <div className="border-2 border-dashed rounded-md border-memory-light p-4">
+                      <Input
+                        id="video"
+                        type="file"
+                        accept="video/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <label htmlFor="video" className="cursor-pointer">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Upload className="h-6 w-6 text-memory-dark" />
+                          <span className="text-sm text-center">
+                            {file ? file.name : "Click to upload video file"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            MP4, MOV or WebM (max 100MB)
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -343,11 +451,11 @@ const MemoryForm = () => {
               </Button>
               <Button 
                 type="submit" 
-                disabled={isLoading}
+                disabled={memoryMutation.isPending}
                 className="bg-memory-DEFAULT hover:bg-memory-dark"
               >
                 <Save className="mr-2 h-4 w-4" />
-                {isLoading ? "Saving..." : "Save Memory"}
+                {memoryMutation.isPending ? "Saving..." : "Save Memory"}
               </Button>
             </CardFooter>
           </form>

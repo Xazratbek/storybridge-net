@@ -4,110 +4,52 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentUser } from "@/utils/authUtils";
 import { Memory, Prompt } from "@/types";
 import { Plus, BookOpen, Calendar, Tag, MessageCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import MemoryCard from "@/components/MemoryCard";
 import PromptCard from "@/components/PromptCard";
 import Timeline from "@/components/Timeline";
-
-// MOCK DATA - In a real app, this would come from an API
-const MOCK_MEMORIES: Memory[] = [
-  {
-    id: "1",
-    title: "Grandma's Apple Pie Recipe",
-    content: "My grandmother used to make the most amazing apple pie. The secret was to use Granny Smith apples and add a pinch of nutmeg. She would always let me help roll out the dough, and I remember how patient she was, even when I made a mess of the kitchen.",
-    date: "1995-11-12T00:00:00.000Z",
-    createdAt: "2023-05-10T00:00:00.000Z",
-    updatedAt: "2023-05-10T00:00:00.000Z",
-    tags: ["Grandma", "Recipe", "Childhood"],
-    category: "Family",
-    mediaType: "text",
-    isPrivate: false,
-    authorId: "1",
-    sharedWith: [],
-  },
-  {
-    id: "2",
-    title: "First Day of College",
-    content: "I remember feeling so nervous and excited on my first day of college. I had packed everything the night before and barely slept. When I arrived on campus, the energy was electric. I met my roommate, who later became my best friend, and we spent the evening exploring the campus.",
-    date: "2010-09-01T00:00:00.000Z",
-    createdAt: "2023-05-15T00:00:00.000Z",
-    updatedAt: "2023-05-15T00:00:00.000Z",
-    tags: ["College", "Beginnings"],
-    category: "Education",
-    mediaType: "text",
-    isPrivate: true,
-    authorId: "1",
-    sharedWith: [],
-  },
-  {
-    id: "3",
-    title: "Our Family Trip to Yellowstone",
-    content: "We spent two weeks exploring Yellowstone National Park. The geysers were incredible, and we saw bison, elk, and even a bear! The kids loved every minute of it, especially when we went hiking around Grand Prismatic Spring. We stayed in a small cabin by the lake, and every evening we'd sit by the fire and tell stories.",
-    date: "2019-07-15T00:00:00.000Z",
-    createdAt: "2023-06-01T00:00:00.000Z",
-    updatedAt: "2023-06-01T00:00:00.000Z",
-    tags: ["Travel", "Family", "Nature"],
-    category: "Vacation",
-    mediaType: "text",
-    isPrivate: false,
-    authorId: "1",
-    sharedWith: ["2"],
-  },
-];
-
-const MOCK_PROMPTS: Prompt[] = [
-  {
-    id: "1",
-    question: "What is your favorite family tradition?",
-    category: "family",
-  },
-  {
-    id: "2",
-    question: "Describe a time when you overcame a significant challenge.",
-    category: "personal",
-  },
-  {
-    id: "3",
-    question: "What was your childhood home like?",
-    category: "childhood",
-  },
-  {
-    id: "4",
-    question: "Share a story your grandparents told you.",
-    category: "family",
-  },
-  {
-    id: "5",
-    question: "What's the most valuable life lesson you've learned?",
-    category: "personal",
-  },
-];
+import { getCurrentUser } from "@/utils/authUtils";
+import { fetchMemories, fetchPrompts } from "@/utils/supabaseUtils";
+import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
-  const [memories, setMemories] = useState<Memory[]>([]);
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
-  const [isLoading, setIsLoading] = useState(true);
   
-  // Check if user is logged in
+  // Fetch current user
+  const { data: currentUser, isLoading: isLoadingUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: getCurrentUser,
+  });
+
+  // Redirect if not authenticated
   useEffect(() => {
-    if (!currentUser) {
+    if (!isLoadingUser && !currentUser) {
+      toast({
+        title: "Not logged in",
+        description: "Please log in to view your dashboard",
+        variant: "destructive",
+      });
       navigate("/login");
     }
-  }, [currentUser, navigate]);
-  
-  // Fetch memories (mock data for now)
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setMemories(MOCK_MEMORIES);
-      setIsLoading(false);
-    }, 500);
-  }, []);
+  }, [currentUser, isLoadingUser, navigate, toast]);
+
+  // Fetch memories
+  const { data: memories = [], isLoading: isLoadingMemories } = useQuery({
+    queryKey: ['memories'],
+    queryFn: fetchMemories,
+    enabled: !!currentUser,
+  });
+
+  // Fetch prompts
+  const { data: prompts = [], isLoading: isLoadingPrompts } = useQuery({
+    queryKey: ['prompts'],
+    queryFn: fetchPrompts,
+  });
   
   const handleCreateMemory = () => {
     navigate("/memory/new");
@@ -128,6 +70,21 @@ const Dashboard = () => {
     if (activeTab === "family") return memory.category.toLowerCase() === "family";
     return true;
   });
+
+  // Show loading state
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen bg-memory-paper bg-paper-texture">
+        <Navbar />
+        <div className="container py-8">
+          <div className="animate-pulse space-y-8">
+            <div className="h-10 bg-memory-light/40 rounded w-1/4"></div>
+            <div className="h-[500px] bg-memory-light/40 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="min-h-screen bg-memory-paper bg-paper-texture">
@@ -176,7 +133,7 @@ const Dashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {isLoading ? (
+                    {isLoadingMemories ? (
                       <div className="grid grid-cols-1 gap-4 animate-pulse">
                         {[1, 2, 3].map((item) => (
                           <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
@@ -217,7 +174,7 @@ const Dashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {isLoading ? (
+                    {isLoadingMemories ? (
                       <div className="grid grid-cols-1 gap-4 animate-pulse">
                         {[1, 2].map((item) => (
                           <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
@@ -251,7 +208,7 @@ const Dashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {isLoading ? (
+                    {isLoadingMemories ? (
                       <div className="grid grid-cols-1 gap-4 animate-pulse">
                         {[1, 2].map((item) => (
                           <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
@@ -285,7 +242,7 @@ const Dashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {isLoading ? (
+                    {isLoadingMemories ? (
                       <div className="grid grid-cols-1 gap-4 animate-pulse">
                         {[1, 2].map((item) => (
                           <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
@@ -338,15 +295,23 @@ const Dashboard = () => {
                   <p className="text-muted-foreground mb-4">
                     Not sure what to write about? Try one of these prompts to spark your memory.
                   </p>
-                  <div className="space-y-4">
-                    {MOCK_PROMPTS.map((prompt) => (
-                      <PromptCard 
-                        key={prompt.id} 
-                        prompt={prompt} 
-                        onClick={handlePromptClick} 
-                      />
-                    ))}
-                  </div>
+                  {isLoadingPrompts ? (
+                    <div className="space-y-4 animate-pulse">
+                      {[1, 2, 3, 4].map((item) => (
+                        <div key={item} className="h-16 bg-gray-100 rounded-lg"></div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {prompts.map((prompt) => (
+                        <PromptCard 
+                          key={prompt.id} 
+                          prompt={prompt} 
+                          onClick={handlePromptClick} 
+                        />
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               
@@ -365,6 +330,11 @@ const Dashboard = () => {
                         {tag}
                       </div>
                     ))}
+                    {memories.length === 0 && (
+                      <div className="text-center w-full p-2">
+                        <p className="text-muted-foreground">No tags available yet.</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
