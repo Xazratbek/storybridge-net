@@ -7,23 +7,37 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Prompt } from "@/types";
-import { CalendarIcon, X, Mic, Video, Save, Upload } from "lucide-react";
+import { CalendarIcon, X, Mic, Video, Save, Upload, ImageIcon, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import Navbar from "@/components/Navbar";
 import { useToast } from "@/components/ui/use-toast";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
 import { 
   fetchMemoryById, 
   createMemory, 
   updateMemory, 
-  uploadFile, 
-  fetchPrompts 
+  uploadFile,
+  fetchPrompts,
+  fetchCategories
 } from "@/utils/supabaseUtils";
 import { getCurrentUser } from "@/utils/authUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
+
+type PrivacyLevel = "private" | "shared" | "family";
+type MediaItem = {
+  id: string;
+  type: "text" | "image" | "audio" | "video";
+  content?: string;
+  file?: File;
+  url?: string;
+};
 
 const MemoryForm = () => {
   const { id, promptId } = useParams();
@@ -36,10 +50,9 @@ const MemoryForm = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [category, setCategory] = useState("Uncategorized");
-  const [isPrivate, setIsPrivate] = useState(true);
-  const [mediaType, setMediaType] = useState<"text" | "audio" | "video">("text");
-  const [file, setFile] = useState<File | null>(null);
-  const [mediaUrl, setMediaUrl] = useState<string | undefined>();
+  const [privacyLevel, setPrivacyLevel] = useState<PrivacyLevel>("private");
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [mediaUploading, setMediaUploading] = useState(false);
 
   // Fetch current user
   const { data: currentUser, isLoading: isLoadingUser } = useQuery({
@@ -63,6 +76,12 @@ const MemoryForm = () => {
   const { data: prompts } = useQuery({
     queryKey: ['prompts'],
     queryFn: fetchPrompts,
+  });
+
+  // Fetch categories
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
   });
 
   // Fetch memory if editing
@@ -105,9 +124,26 @@ const MemoryForm = () => {
       setDate(memory.date ? new Date(memory.date) : new Date());
       setTags(memory.tags);
       setCategory(memory.category);
-      setIsPrivate(memory.isPrivate);
-      setMediaType(memory.mediaType);
-      setMediaUrl(memory.mediaUrl);
+      
+      // Set privacy level based on memory properties
+      if (memory.isPrivate) {
+        setPrivacyLevel("private");
+      } else if (memory.sharedWith && memory.sharedWith.length > 0) {
+        setPrivacyLevel("shared");
+      } else {
+        setPrivacyLevel("family");
+      }
+
+      // Set media items
+      if (memory.mediaType && memory.mediaUrl) {
+        setMediaItems([
+          {
+            id: Date.now().toString(),
+            type: memory.mediaType,
+            url: memory.mediaUrl,
+          }
+        ]);
+      }
     }
   }, [memory]);
 
@@ -132,9 +168,57 @@ const MemoryForm = () => {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+  const handleAddMediaItem = (type: "text" | "image" | "audio" | "video") => {
+    setMediaItems([
+      ...mediaItems,
+      {
+        id: Date.now().toString(),
+        type,
+        content: type === "text" ? "" : undefined,
+      }
+    ]);
+  };
+  
+  const handleRemoveMediaItem = (id: string) => {
+    setMediaItems(mediaItems.filter(item => item.id !== id));
+  };
+  
+  const handleMediaFileChange = (id: string, file: File) => {
+    setMediaItems(mediaItems.map(item => 
+      item.id === id ? { ...item, file } : item
+    ));
+  };
+  
+  const handleTextContentChange = (id: string, content: string) => {
+    setMediaItems(mediaItems.map(item => 
+      item.id === id ? { ...item, content } : item
+    ));
+  };
+
+  const uploadMediaFiles = async () => {
+    setMediaUploading(true);
+    const itemsWithUrls = [...mediaItems];
+    
+    try {
+      for (let i = 0; i < itemsWithUrls.length; i++) {
+        const item = itemsWithUrls[i];
+        
+        if (item.file) {
+          const uploadedUrl = await uploadFile(item.file, item.type);
+          if (uploadedUrl) {
+            itemsWithUrls[i] = {
+              ...item,
+              url: uploadedUrl
+            };
+          }
+        }
+      }
+      
+      setMediaUploading(false);
+      return itemsWithUrls;
+    } catch (error) {
+      setMediaUploading(false);
+      throw error;
     }
   };
 
@@ -151,7 +235,7 @@ const MemoryForm = () => {
       return;
     }
     
-    if (!title || !content || !date) {
+    if (!title || !date) {
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields",
@@ -160,33 +244,51 @@ const MemoryForm = () => {
       return;
     }
     
-    let finalMediaUrl = mediaUrl;
-    
-    // Upload file if provided
-    if (file && (mediaType === "audio" || mediaType === "video")) {
-      const uploadedUrl = await uploadFile(file, mediaType);
-      if (uploadedUrl) {
-        finalMediaUrl = uploadedUrl;
-      }
+    try {
+      // Upload all media files
+      const itemsWithUrls = await uploadMediaFiles();
+      
+      // Prepare data for memory creation/update
+      const isPrivate = privacyLevel === "private";
+      const sharedWith = privacyLevel === "shared" ? ["PLACEHOLDER_USER_ID"] : [];
+      
+      // Find the primary media item to use for the main memory record
+      const primaryMedia = itemsWithUrls.find(item => item.url);
+      
+      const memoryData = {
+        id: id || "",
+        title,
+        content: content || itemsWithUrls.filter(item => item.type === "text")
+          .map(item => item.content)
+          .join("\n\n"),
+        date: date ? date.toISOString() : new Date().toISOString(),
+        tags,
+        category,
+        mediaType: primaryMedia?.type || "text",
+        mediaUrl: primaryMedia?.url,
+        isPrivate,
+        authorId: currentUser.id,
+        sharedWith,
+        createdAt: "",
+        updatedAt: "",
+        // Store all media items in a JSON structure for retrieval
+        mediaItems: JSON.stringify(
+          itemsWithUrls.map(item => ({
+            type: item.type,
+            url: item.url,
+            content: item.content
+          }))
+        )
+      };
+      
+      memoryMutation.mutate(memoryData);
+    } catch (error: any) {
+      toast({
+        title: "Error saving memory",
+        description: error.message || "An error occurred while saving your memory",
+        variant: "destructive",
+      });
     }
-    
-    const memoryData = {
-      id: id || "",
-      title,
-      content,
-      date: date ? date.toISOString() : new Date().toISOString(),
-      tags,
-      category,
-      mediaType,
-      mediaUrl: finalMediaUrl,
-      isPrivate,
-      authorId: currentUser.id,
-      sharedWith: [],
-      createdAt: "",
-      updatedAt: "",
-    };
-    
-    memoryMutation.mutate(memoryData);
   };
   
   // Handle loading states
@@ -212,160 +314,49 @@ const MemoryForm = () => {
     <div className="min-h-screen bg-memory-paper bg-paper-texture">
       <Navbar />
       <div className="container py-8">
-        <Card className="border-memory-light shadow-md max-w-3xl mx-auto">
+        <Card className="border-memory-light shadow-md max-w-4xl mx-auto">
           <CardHeader>
-            <CardTitle className="text-2xl font-serif">
+            <CardTitle className="text-2xl font-serif text-purple-800">
               {id ? "Edit Memory" : "Create New Memory"}
             </CardTitle>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
+                <Label htmlFor="title" className="text-purple-800">Title</Label>
                 <Input
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Give your memory a title"
+                  className="border-purple-200 focus:border-purple-400"
                   required
                 />
               </div>
               
-              <div className="flex flex-wrap gap-4">
-                <Button
-                  type="button"
-                  variant={mediaType === "text" ? "default" : "outline"}
-                  onClick={() => setMediaType("text")}
-                  className={mediaType === "text" ? "bg-memory-DEFAULT hover:bg-memory-dark" : ""}
-                >
-                  Text
-                </Button>
-                <Button
-                  type="button"
-                  variant={mediaType === "audio" ? "default" : "outline"}
-                  onClick={() => setMediaType("audio")}
-                  className={mediaType === "audio" ? "bg-memory-DEFAULT hover:bg-memory-dark" : ""}
-                >
-                  <Mic className="mr-2 h-4 w-4" />
-                  Audio
-                </Button>
-                <Button
-                  type="button"
-                  variant={mediaType === "video" ? "default" : "outline"}
-                  onClick={() => setMediaType("video")}
-                  className={mediaType === "video" ? "bg-memory-DEFAULT hover:bg-memory-dark" : ""}
-                >
-                  <Video className="mr-2 h-4 w-4" />
-                  Video
-                </Button>
+              <div className="space-y-2">
+                <Label htmlFor="content" className="text-purple-800">Main Memory Content</Label>
+                <Textarea
+                  id="content"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Write your memory here..."
+                  className="min-h-[150px] border-purple-200 focus:border-purple-400"
+                />
               </div>
               
-              {mediaType === "text" && (
-                <div className="space-y-2">
-                  <Label htmlFor="content">Memory Details</Label>
-                  <Textarea
-                    id="content"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Write your memory here..."
-                    className="min-h-[200px]"
-                    required
-                  />
-                </div>
-              )}
-              
-              {mediaType === "audio" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="content">Memory Details</Label>
-                    <Textarea
-                      id="content"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="Provide a description for your audio memory..."
-                      className="min-h-[100px]"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="audio">Audio File</Label>
-                    <div className="border-2 border-dashed rounded-md border-memory-light p-4">
-                      <Input
-                        id="audio"
-                        type="file"
-                        accept="audio/*"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                      <label htmlFor="audio" className="cursor-pointer">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Upload className="h-6 w-6 text-memory-dark" />
-                          <span className="text-sm text-center">
-                            {file ? file.name : "Click to upload audio file"}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            MP3, WAV or M4A (max 20MB)
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {mediaType === "video" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="content">Memory Details</Label>
-                    <Textarea
-                      id="content"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="Provide a description for your video memory..."
-                      className="min-h-[100px]"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="video">Video File</Label>
-                    <div className="border-2 border-dashed rounded-md border-memory-light p-4">
-                      <Input
-                        id="video"
-                        type="file"
-                        accept="video/*"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                      <label htmlFor="video" className="cursor-pointer">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Upload className="h-6 w-6 text-memory-dark" />
-                          <span className="text-sm text-center">
-                            {file ? file.name : "Click to upload video file"}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            MP4, MOV or WebM (max 100MB)
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
               <div className="space-y-2">
-                <Label>When did this memory occur?</Label>
+                <Label className="text-purple-800">When did this memory occur?</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-normal border-purple-200",
                         !date && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      <CalendarIcon className="mr-2 h-4 w-4 text-purple-500" />
                       {date ? format(date, "MMMM d, yyyy") : "Select a date"}
                     </Button>
                   </PopoverTrigger>
@@ -375,29 +366,41 @@ const MemoryForm = () => {
                       selected={date}
                       onSelect={setDate}
                       initialFocus
+                      className="border-purple-200"
                     />
                   </PopoverContent>
                 </Popover>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="e.g., Childhood, Family, Travel"
-                />
+                <Label htmlFor="category" className="text-purple-800">Category</Label>
+                <Select 
+                  value={category} 
+                  onValueChange={setCategory}
+                >
+                  <SelectTrigger className="border-purple-200">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Uncategorized">Uncategorized</SelectItem>
+                    {categories?.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="tags">Tags</Label>
+                <Label htmlFor="tags" className="text-purple-800">Tags</Label>
                 <div className="flex gap-2 mb-2">
                   <Input
                     id="tags"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     placeholder="Add a tag"
+                    className="border-purple-200 focus:border-purple-400"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -408,7 +411,7 @@ const MemoryForm = () => {
                   <Button 
                     type="button" 
                     onClick={handleAddTag}
-                    className="bg-memory-DEFAULT hover:bg-memory-dark"
+                    className="bg-purple-600 hover:bg-purple-700"
                   >
                     Add
                   </Button>
@@ -417,13 +420,13 @@ const MemoryForm = () => {
                   {tags.map((tag, index) => (
                     <div
                       key={index}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-memory-light text-memory-dark text-sm"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-sm"
                     >
                       {tag}
                       <button
                         type="button"
                         onClick={() => handleRemoveTag(tag)}
-                        className="h-4 w-4 rounded-full flex items-center justify-center text-memory-dark hover:bg-memory-DEFAULT hover:text-white"
+                        className="h-4 w-4 rounded-full flex items-center justify-center text-purple-700 hover:bg-purple-200"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -432,30 +435,224 @@ const MemoryForm = () => {
                 </div>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="privacy"
-                  checked={isPrivate}
-                  onCheckedChange={setIsPrivate}
-                />
-                <Label htmlFor="privacy">Keep this memory private</Label>
+              <div className="space-y-2">
+                <Label className="text-purple-800">Privacy Level</Label>
+                <RadioGroup 
+                  value={privacyLevel} 
+                  onValueChange={(value) => setPrivacyLevel(value as PrivacyLevel)}
+                  className="flex space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="private" id="private" className="text-purple-600" />
+                    <Label htmlFor="private">Private (Only you)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="shared" id="shared" className="text-purple-600" />
+                    <Label htmlFor="shared">Shared (Specific people)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="family" id="family" className="text-purple-600" />
+                    <Label htmlFor="family">Family (All family members)</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              
+              <div className="space-y-4 border-t border-purple-100 pt-6">
+                <div className="flex justify-between items-center">
+                  <Label className="text-lg font-medium text-purple-800">Media Items</Label>
+                  <div className="flex space-x-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleAddMediaItem("text")}
+                      className="border-purple-200 text-purple-700"
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Text
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleAddMediaItem("image")}
+                      className="border-purple-200 text-purple-700"
+                    >
+                      <ImageIcon className="mr-1 h-4 w-4" /> Image
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleAddMediaItem("audio")}
+                      className="border-purple-200 text-purple-700"
+                    >
+                      <Mic className="mr-1 h-4 w-4" /> Audio
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleAddMediaItem("video")}
+                      className="border-purple-200 text-purple-700"
+                    >
+                      <Video className="mr-1 h-4 w-4" /> Video
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  {mediaItems.length === 0 && (
+                    <div className="text-center py-6 bg-purple-50 rounded-lg border-2 border-dashed border-purple-200">
+                      <p className="text-purple-700">Add media items to enhance your memory</p>
+                    </div>
+                  )}
+                  
+                  {mediaItems.map((item) => (
+                    <Card key={item.id} className="border-purple-200">
+                      <div className="p-4">
+                        <div className="flex justify-between mb-2">
+                          <Label className="capitalize text-purple-700">{item.type}</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveMediaItem(item.id)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        
+                        {item.type === "text" && (
+                          <Textarea
+                            value={item.content || ""}
+                            onChange={(e) => handleTextContentChange(item.id, e.target.value)}
+                            placeholder="Enter additional text memory..."
+                            className="min-h-[100px] border-purple-200 focus:border-purple-400"
+                          />
+                        )}
+                        
+                        {item.type === "image" && (
+                          <div className="space-y-2">
+                            <div className="border-2 border-dashed rounded-md border-purple-200 p-4">
+                              <Input
+                                id={`image-${item.id}`}
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => e.target.files && handleMediaFileChange(item.id, e.target.files[0])}
+                                className="hidden"
+                              />
+                              <label htmlFor={`image-${item.id}`} className="cursor-pointer">
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                  <Upload className="h-6 w-6 text-purple-600" />
+                                  <span className="text-sm text-center">
+                                    {item.file ? item.file.name : "Click to upload image"}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    JPG, PNG, GIF (max 10MB)
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
+                            {item.url && (
+                              <div className="mt-2 relative aspect-video rounded-md overflow-hidden">
+                                <img 
+                                  src={item.url} 
+                                  alt="Uploaded" 
+                                  className="w-full h-full object-contain bg-purple-50" 
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {item.type === "audio" && (
+                          <div className="space-y-2">
+                            <div className="border-2 border-dashed rounded-md border-purple-200 p-4">
+                              <Input
+                                id={`audio-${item.id}`}
+                                type="file"
+                                accept="audio/*"
+                                onChange={(e) => e.target.files && handleMediaFileChange(item.id, e.target.files[0])}
+                                className="hidden"
+                              />
+                              <label htmlFor={`audio-${item.id}`} className="cursor-pointer">
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                  <Upload className="h-6 w-6 text-purple-600" />
+                                  <span className="text-sm text-center">
+                                    {item.file ? item.file.name : "Click to upload audio file"}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    MP3, WAV or M4A (max 20MB)
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
+                            {item.url && (
+                              <div className="mt-2">
+                                <audio controls className="w-full">
+                                  <source src={item.url} type="audio/mpeg" />
+                                  Your browser does not support the audio element.
+                                </audio>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {item.type === "video" && (
+                          <div className="space-y-2">
+                            <div className="border-2 border-dashed rounded-md border-purple-200 p-4">
+                              <Input
+                                id={`video-${item.id}`}
+                                type="file"
+                                accept="video/*"
+                                onChange={(e) => e.target.files && handleMediaFileChange(item.id, e.target.files[0])}
+                                className="hidden"
+                              />
+                              <label htmlFor={`video-${item.id}`} className="cursor-pointer">
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                  <Upload className="h-6 w-6 text-purple-600" />
+                                  <span className="text-sm text-center">
+                                    {item.file ? item.file.name : "Click to upload video file"}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    MP4, MOV or WebM (max 100MB)
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
+                            {item.url && (
+                              <div className="mt-2">
+                                <video controls className="w-full rounded-md">
+                                  <source src={item.url} type="video/mp4" />
+                                  Your browser does not support the video element.
+                                </video>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
+            <CardFooter className="flex justify-between border-t border-purple-100 pt-6">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => navigate("/dashboard")}
+                className="border-purple-200 text-purple-700"
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
-                disabled={memoryMutation.isPending}
-                className="bg-memory-DEFAULT hover:bg-memory-dark"
+                disabled={memoryMutation.isPending || mediaUploading}
+                className="bg-purple-600 hover:bg-purple-700"
               >
                 <Save className="mr-2 h-4 w-4" />
-                {memoryMutation.isPending ? "Saving..." : "Save Memory"}
+                {memoryMutation.isPending || mediaUploading ? "Saving..." : "Save Memory"}
               </Button>
             </CardFooter>
           </form>

@@ -29,6 +29,8 @@ export const fetchMemories = async (): Promise<Memory[]> => {
       isPrivate: memory.is_private,
       authorId: memory.author_id,
       sharedWith: memory.shared_with || [],
+      // Parse mediaItems if available
+      mediaItems: memory.media_items ? JSON.parse(memory.media_items) : []
     }));
   } catch (error: any) {
     toast({
@@ -66,6 +68,8 @@ export const fetchMemoryById = async (id: string): Promise<Memory | null> => {
       isPrivate: data.is_private,
       authorId: data.author_id,
       sharedWith: data.shared_with || [],
+      // Parse mediaItems if available
+      mediaItems: data.media_items ? JSON.parse(data.media_items) : []
     };
   } catch (error: any) {
     toast({
@@ -92,6 +96,7 @@ export const createMemory = async (memory: Omit<Memory, "id" | "createdAt" | "up
         is_private: memory.isPrivate,
         author_id: memory.authorId,
         shared_with: memory.sharedWith,
+        media_items: memory.mediaItems || null, // Store all media items
       })
       .select()
       .single();
@@ -114,6 +119,7 @@ export const createMemory = async (memory: Omit<Memory, "id" | "createdAt" | "up
       isPrivate: data.is_private,
       authorId: data.author_id,
       sharedWith: data.shared_with || [],
+      mediaItems: data.media_items ? JSON.parse(data.media_items) : []
     };
   } catch (error: any) {
     toast({
@@ -139,6 +145,7 @@ export const updateMemory = async (memory: Memory): Promise<Memory | null> => {
         media_url: memory.mediaUrl,
         is_private: memory.isPrivate,
         shared_with: memory.sharedWith,
+        media_items: memory.mediaItems || null, // Store all media items
       })
       .eq("id", memory.id)
       .select()
@@ -162,6 +169,7 @@ export const updateMemory = async (memory: Memory): Promise<Memory | null> => {
       isPrivate: data.is_private,
       authorId: data.author_id,
       sharedWith: data.shared_with || [],
+      mediaItems: data.media_items ? JSON.parse(data.media_items) : []
     };
   } catch (error: any) {
     toast({

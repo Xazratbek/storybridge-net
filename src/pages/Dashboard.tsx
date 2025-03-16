@@ -1,85 +1,203 @@
 
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Memory, Prompt } from "@/types";
-import { Plus, BookOpen, Calendar, Tag, MessageCircle } from "lucide-react";
-import Navbar from "@/components/Navbar";
-import MemoryCard from "@/components/MemoryCard";
-import PromptCard from "@/components/PromptCard";
-import Timeline from "@/components/Timeline";
-import { getCurrentUser } from "@/utils/authUtils";
-import { fetchMemories, fetchPrompts } from "@/utils/supabaseUtils";
-import { useQuery } from "@tanstack/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
+import Navbar from '@/components/Navbar';
+import MemoryCard from '@/components/MemoryCard';
+import PromptCard from '@/components/PromptCard';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchMemories, deleteMemory, fetchPrompts, fetchCategories } from "@/utils/supabaseUtils";
+import { getCurrentUser } from "@/utils/authUtils";
+import { Memory } from '@/types';
+import { 
+  Plus, 
+  Search, 
+  Calendar, 
+  Tag, 
+  Filter, 
+  Trash2, 
+  BookText, 
+  Brain, 
+  Clock, 
+  Lightbulb, 
+  Folder,
+  X
+} from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("all");
+  const queryClient = useQueryClient();
+  
+  const [activeTab, setActiveTab] = useState<string>("memories");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedTag, setSelectedTag] = useState<string>("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
   
   // Fetch current user
   const { data: currentUser, isLoading: isLoadingUser } = useQuery({
     queryKey: ['currentUser'],
     queryFn: getCurrentUser,
   });
-
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isLoadingUser && !currentUser) {
-      toast({
-        title: "Not logged in",
-        description: "Please log in to view your dashboard",
-        variant: "destructive",
-      });
-      navigate("/login");
-    }
-  }, [currentUser, isLoadingUser, navigate, toast]);
-
+  
   // Fetch memories
-  const { data: memories = [], isLoading: isLoadingMemories } = useQuery({
+  const { 
+    data: memories, 
+    isLoading: isLoadingMemories,
+    isError: isErrorMemories,
+    error: memoriesError
+  } = useQuery({
     queryKey: ['memories'],
     queryFn: fetchMemories,
     enabled: !!currentUser,
   });
-
+  
   // Fetch prompts
-  const { data: prompts = [], isLoading: isLoadingPrompts } = useQuery({
+  const { 
+    data: prompts, 
+    isLoading: isLoadingPrompts 
+  } = useQuery({
     queryKey: ['prompts'],
     queryFn: fetchPrompts,
   });
-  
-  const handleCreateMemory = () => {
-    navigate("/memory/new");
-  };
-  
-  const handlePromptClick = (prompt: Prompt) => {
-    navigate(`/memory/new/prompt/${prompt.id}`);
-  };
-  
-  const handleMemoryClick = (memory: Memory) => {
-    navigate(`/memory/${memory.id}`);
-  };
-  
-  const filteredMemories = memories.filter(memory => {
-    if (activeTab === "all") return true;
-    if (activeTab === "private") return memory.isPrivate;
-    if (activeTab === "shared") return !memory.isPrivate;
-    if (activeTab === "family") return memory.category.toLowerCase() === "family";
-    return true;
-  });
 
-  // Show loading state
-  if (isLoadingUser) {
+  // Fetch categories
+  const { 
+    data: categories, 
+    isLoading: isLoadingCategories 
+  } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  });
+  
+  // Delete memory mutation
+  const deleteMutation = useMutation({
+    mutationFn: deleteMemory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['memories'] });
+      toast({
+        title: "Memory deleted",
+        description: "Your memory has been successfully deleted."
+      });
+      setDeleteId(null);
+      setIsDeleteDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete memory",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Handle delete memory
+  const handleDeleteIntent = (id: string) => {
+    setDeleteId(id);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const confirmDelete = () => {
+    if (deleteId) {
+      deleteMutation.mutate(deleteId);
+    }
+  };
+  
+  // Filter and sort memories
+  const filteredMemories = memories?.filter(memory => {
+    // Filter by author
+    if (currentUser && memory.authorId !== currentUser.id) return false;
+    
+    // Filter by search query
+    if (searchQuery && !memory.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        !memory.content?.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    
+    // Filter by category
+    if (selectedCategory && memory.category !== selectedCategory) return false;
+    
+    // Filter by tag
+    if (selectedTag && !memory.tags.includes(selectedTag)) return false;
+    
+    return true;
+  }).sort((a, b) => {
+    // Sort by date descending
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  }) || [];
+  
+  // Extract all unique tags from memories
+  const allTags = Array.from(
+    new Set(
+      memories?.flatMap(memory => memory.tags || []) || []
+    )
+  );
+  
+  // Redirect if not authenticated
+  if (!isLoadingUser && !currentUser) {
+    navigate("/login");
+    return null;
+  }
+  
+  // Handle prompt click
+  const handlePromptClick = (promptId: string) => {
+    navigate(`/memory/new/${promptId}`);
+  };
+  
+  // Loading state
+  if (isLoadingUser || isLoadingMemories || isLoadingPrompts) {
     return (
-      <div className="min-h-screen bg-memory-paper bg-paper-texture">
+      <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <div className="container py-8">
-          <div className="animate-pulse space-y-8">
-            <div className="h-10 bg-memory-light/40 rounded w-1/4"></div>
-            <div className="h-[500px] bg-memory-light/40 rounded"></div>
+        <div className="container max-w-7xl mx-auto px-4 py-8">
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-pulse space-y-4">
+              <div className="h-8 bg-purple-200 rounded w-48 mx-auto"></div>
+              <div className="h-4 bg-purple-100 rounded w-64"></div>
+              <div className="h-32 bg-purple-100 rounded-lg w-80"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Error state
+  if (isErrorMemories) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="container max-w-7xl mx-auto px-4 py-8">
+          <div className="flex flex-col justify-center items-center h-64">
+            <h2 className="text-2xl font-bold text-red-600 mb-2">Error Loading Memories</h2>
+            <p className="text-gray-600 mb-4">{memoriesError?.message || "An error occurred while loading your memories."}</p>
+            <Button onClick={() => queryClient.invalidateQueries({ queryKey: ['memories'] })}>
+              Try Again
+            </Button>
           </div>
         </div>
       </div>
@@ -87,261 +205,235 @@ const Dashboard = () => {
   }
   
   return (
-    <div className="min-h-screen bg-memory-paper bg-paper-texture">
+    <div className="min-h-screen bg-memory-paper">
       <Navbar />
       
-      <div className="container py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-serif font-bold text-memory-dark">Your Memory Collection</h1>
-            <p className="text-muted-foreground">Preserve and organize your life stories</p>
+            <h1 className="text-3xl font-bold text-purple-800 mb-2 font-serif">Welcome, {currentUser?.name}</h1>
+            <p className="text-gray-600">Preserve your memories for future generations.</p>
           </div>
           
-          <Button
-            onClick={handleCreateMemory}
-            className="bg-memory-DEFAULT hover:bg-memory-dark"
+          <Button 
+            onClick={() => navigate("/memory/new")}
+            className="bg-purple-600 hover:bg-purple-700"
           >
             <Plus className="mr-2 h-4 w-4" />
             Create Memory
           </Button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
-            <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="mb-6">
-                <TabsTrigger value="all" className="data-[state=active]:bg-memory-DEFAULT data-[state=active]:text-white">
-                  All Memories
-                </TabsTrigger>
-                <TabsTrigger value="private" className="data-[state=active]:bg-memory-DEFAULT data-[state=active]:text-white">
-                  Private
-                </TabsTrigger>
-                <TabsTrigger value="shared" className="data-[state=active]:bg-memory-DEFAULT data-[state=active]:text-white">
-                  Shared
-                </TabsTrigger>
-                <TabsTrigger value="family" className="data-[state=active]:bg-memory-DEFAULT data-[state=active]:text-white">
-                  Family
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="all" className="mt-0">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-serif flex items-center">
-                      <BookOpen className="mr-2 h-5 w-5 text-memory-DEFAULT" />
-                      All Memories
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingMemories ? (
-                      <div className="grid grid-cols-1 gap-4 animate-pulse">
-                        {[1, 2, 3].map((item) => (
-                          <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
-                        ))}
-                      </div>
-                    ) : filteredMemories.length === 0 ? (
-                      <div className="text-center p-8 border-2 border-dashed border-memory-light rounded-lg">
-                        <p className="text-muted-foreground">You haven't saved any memories yet.</p>
-                        <Button 
-                          onClick={handleCreateMemory} 
-                          variant="outline" 
-                          className="mt-4"
-                        >
-                          Create Your First Memory
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-4">
-                        {filteredMemories.map((memory) => (
-                          <MemoryCard
-                            key={memory.id}
-                            memory={memory}
-                            onClick={() => handleMemoryClick(memory)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="private" className="mt-0">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-serif flex items-center">
-                      <BookOpen className="mr-2 h-5 w-5 text-memory-DEFAULT" />
-                      Private Memories
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingMemories ? (
-                      <div className="grid grid-cols-1 gap-4 animate-pulse">
-                        {[1, 2].map((item) => (
-                          <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
-                        ))}
-                      </div>
-                    ) : filteredMemories.length === 0 ? (
-                      <div className="text-center p-8 border-2 border-dashed border-memory-light rounded-lg">
-                        <p className="text-muted-foreground">No private memories found.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-4">
-                        {filteredMemories.map((memory) => (
-                          <MemoryCard
-                            key={memory.id}
-                            memory={memory}
-                            onClick={() => handleMemoryClick(memory)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="shared" className="mt-0">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-serif flex items-center">
-                      <BookOpen className="mr-2 h-5 w-5 text-memory-DEFAULT" />
-                      Shared Memories
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingMemories ? (
-                      <div className="grid grid-cols-1 gap-4 animate-pulse">
-                        {[1, 2].map((item) => (
-                          <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
-                        ))}
-                      </div>
-                    ) : filteredMemories.length === 0 ? (
-                      <div className="text-center p-8 border-2 border-dashed border-memory-light rounded-lg">
-                        <p className="text-muted-foreground">No shared memories found.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-4">
-                        {filteredMemories.map((memory) => (
-                          <MemoryCard
-                            key={memory.id}
-                            memory={memory}
-                            onClick={() => handleMemoryClick(memory)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="family" className="mt-0">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-serif flex items-center">
-                      <BookOpen className="mr-2 h-5 w-5 text-memory-DEFAULT" />
-                      Family Memories
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingMemories ? (
-                      <div className="grid grid-cols-1 gap-4 animate-pulse">
-                        {[1, 2].map((item) => (
-                          <div key={item} className="h-48 bg-gray-100 rounded-lg"></div>
-                        ))}
-                      </div>
-                    ) : filteredMemories.length === 0 ? (
-                      <div className="text-center p-8 border-2 border-dashed border-memory-light rounded-lg">
-                        <p className="text-muted-foreground">No family memories found.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-4">
-                        {filteredMemories.map((memory) => (
-                          <MemoryCard
-                            key={memory.id}
-                            memory={memory}
-                            onClick={() => handleMemoryClick(memory)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+        <Tabs defaultValue="memories" value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <TabsList className="bg-purple-100">
+              <TabsTrigger value="memories" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+                <BookText className="mr-2 h-4 w-4" />
+                My Memories
+              </TabsTrigger>
+              <TabsTrigger value="prompts" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+                <Lightbulb className="mr-2 h-4 w-4" />
+                Memory Prompts
+              </TabsTrigger>
+              <TabsTrigger value="timeline" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+                <Clock className="mr-2 h-4 w-4" />
+                Timeline
+              </TabsTrigger>
+            </TabsList>
             
-            <div className="mt-8">
-              <h2 className="text-2xl font-serif font-bold text-memory-dark mb-4 flex items-center">
-                <Calendar className="mr-2 h-6 w-6 text-memory-DEFAULT" />
-                Memory Timeline
-              </h2>
-              <Card>
-                <CardContent className="p-6">
-                  <Timeline 
-                    memories={memories} 
-                    onMemoryClick={handleMemoryClick} 
+            {activeTab === "memories" && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-grow">
+                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search memories..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 border-purple-200 focus:border-purple-400"
                   />
-                </CardContent>
-              </Card>
-            </div>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-[180px] border-purple-200">
+                    <Folder className="mr-2 h-4 w-4 text-purple-500" />
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Categories</SelectItem>
+                    {categories?.map((category) => (
+                      <SelectItem key={category.id} value={category.name}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={selectedTag} onValueChange={setSelectedTag}>
+                  <SelectTrigger className="w-[140px] border-purple-200">
+                    <Tag className="mr-2 h-4 w-4 text-purple-500" />
+                    <SelectValue placeholder="Tag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Tags</SelectItem>
+                    {allTags.map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        {tag}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           
-          <div>
-            <div className="sticky top-4">
-              <h2 className="text-2xl font-serif font-bold text-memory-dark mb-4 flex items-center">
-                <MessageCircle className="mr-2 h-6 w-6 text-memory-DEFAULT" />
-                Memory Prompts
-              </h2>
-              <Card className="bg-memory-light/10">
-                <CardContent className="p-6">
-                  <p className="text-muted-foreground mb-4">
-                    Not sure what to write about? Try one of these prompts to spark your memory.
-                  </p>
-                  {isLoadingPrompts ? (
-                    <div className="space-y-4 animate-pulse">
-                      {[1, 2, 3, 4].map((item) => (
-                        <div key={item} className="h-16 bg-gray-100 rounded-lg"></div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {prompts.map((prompt) => (
-                        <PromptCard 
-                          key={prompt.id} 
-                          prompt={prompt} 
-                          onClick={handlePromptClick} 
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+          <TabsContent value="memories" className="mt-0">
+            {filteredMemories.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center border border-purple-100">
+                <div className="mb-4 bg-purple-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto">
+                  <BookText className="h-8 w-8 text-purple-400" />
+                </div>
+                <h3 className="text-xl font-medium text-gray-900 mb-2">No memories found</h3>
+                <p className="text-gray-500 mb-6">
+                  {searchQuery || selectedCategory || selectedTag ? 
+                    "Try adjusting your filters or search query." : 
+                    "Start preserving your precious memories today."}
+                </p>
+                <Button 
+                  onClick={() => navigate("/memory/new")}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Your First Memory
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredMemories.map((memory) => (
+                  <MemoryCard 
+                    key={memory.id} 
+                    memory={memory} 
+                    onDelete={handleDeleteIntent}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="prompts" className="mt-0">
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-purple-100">
+              <h2 className="text-xl font-medium text-purple-800 mb-4 font-serif">Memory Prompts</h2>
+              <p className="text-gray-600 mb-6">
+                Not sure what to write about? These prompts will help you capture meaningful memories.
+              </p>
               
-              <h2 className="text-2xl font-serif font-bold text-memory-dark mt-8 mb-4 flex items-center">
-                <Tag className="mr-2 h-6 w-6 text-memory-DEFAULT" />
-                Popular Tags
-              </h2>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from(new Set(memories.flatMap(m => m.tags))).map((tag, index) => (
-                      <div 
-                        key={index}
-                        className="px-3 py-1 rounded-full bg-memory-light text-memory-dark text-sm cursor-pointer hover:bg-memory-DEFAULT hover:text-white transition-colors"
-                      >
-                        {tag}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {prompts?.map((prompt) => (
+                  <PromptCard 
+                    key={prompt.id} 
+                    prompt={prompt} 
+                    onClick={() => handlePromptClick(prompt.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="timeline" className="mt-0">
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-purple-100">
+              <h2 className="text-xl font-medium text-purple-800 mb-4 font-serif">Memory Timeline</h2>
+              <p className="text-gray-600 mb-6">
+                View your memories in chronological order.
+              </p>
+              
+              {filteredMemories.length === 0 ? (
+                <div className="text-center p-8">
+                  <div className="mb-4 bg-purple-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto">
+                    <Calendar className="h-8 w-8 text-purple-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No memories to display</h3>
+                  <p className="text-gray-500 mb-6">
+                    Create memories to see them on your timeline.
+                  </p>
+                  <Button 
+                    onClick={() => navigate("/memory/new")}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Memory
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Group memories by year */}
+                  {Object.entries(
+                    filteredMemories.reduce((acc, memory) => {
+                      const year = new Date(memory.date).getFullYear();
+                      if (!acc[year]) acc[year] = [];
+                      acc[year].push(memory);
+                      return acc;
+                    }, {} as Record<number, Memory[]>)
+                  )
+                    .sort(([yearA], [yearB]) => Number(yearB) - Number(yearA))
+                    .map(([year, yearMemories]) => (
+                      <div key={year}>
+                        <h3 className="text-lg font-medium text-purple-700 mb-4">{year}</h3>
+                        <div className="timeline-container">
+                          {yearMemories
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .map((memory) => (
+                              <div key={memory.id} className="timeline-item">
+                                <div className="timeline-dot"></div>
+                                <div className="timeline-date">{new Date(memory.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</div>
+                                <h4 className="font-medium text-gray-900 mt-1 mb-1">{memory.title}</h4>
+                                <p className="text-sm text-gray-600 line-clamp-2 mb-2">{memory.content}</p>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-purple-700 hover:bg-purple-50 p-0"
+                                  asChild
+                                >
+                                  <Link to={`/memory/${memory.id}`}>View memory</Link>
+                                </Button>
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     ))}
-                    {memories.length === 0 && (
-                      <div className="text-center w-full p-2">
-                        <p className="text-muted-foreground">No tags available yet.</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </div>
+      
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the memory and all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
