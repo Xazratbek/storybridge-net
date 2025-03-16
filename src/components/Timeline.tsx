@@ -44,17 +44,17 @@ const Timeline = ({ memories, onMemoryClick }: TimelineProps) => {
   return (
     <div className="space-y-8 py-4">
       {years.length === 0 ? (
-        <div className="text-center p-8 border-2 border-dashed border-memory-light rounded-lg">
+        <div className="text-center p-8 border-2 border-dashed border-indigo-200 rounded-lg">
           <p className="text-muted-foreground">No memories in your timeline yet.</p>
         </div>
       ) : (
         years.map(year => (
-          <div key={year} className="border-l-2 border-memory-light pl-4">
+          <div key={year} className="border-l-2 border-indigo-200 pl-4">
             <div className="flex items-center mb-4">
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="flex items-center text-xl font-serif font-semibold text-memory-dark"
+                className="flex items-center text-xl font-serif font-semibold text-indigo-800"
                 onClick={() => toggleYear(year)}
               >
                 {year}
@@ -74,7 +74,7 @@ const Timeline = ({ memories, onMemoryClick }: TimelineProps) => {
                     </div>
                     <MemoryCard 
                       memory={memory}
-                      onClick={() => onMemoryClick(memory)}
+                      onClick={onMemoryClick}
                     />
                   </div>
                 ))}

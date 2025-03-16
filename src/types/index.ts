@@ -6,6 +6,12 @@ export type User = {
   avatar?: string;
 };
 
+export type MediaItem = {
+  type: 'image' | 'audio' | 'video';
+  url: string;
+  title?: string;
+}
+
 export type Memory = {
   id: string;
   title: string;
@@ -20,6 +26,7 @@ export type Memory = {
   isPrivate: boolean;
   authorId: string;
   sharedWith: string[];
+  mediaItems?: MediaItem[];
 };
 
 export type Prompt = {

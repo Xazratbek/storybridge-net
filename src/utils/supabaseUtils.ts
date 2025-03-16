@@ -1,6 +1,5 @@
-
 import { supabase } from "@/integrations/supabase/client";
-import { Memory, Prompt, Category, Tag, Profile } from "@/types";
+import { Memory, Prompt, Category, Tag, Profile, MediaItem } from "@/types";
 import { toast } from "@/components/ui/use-toast";
 
 // Memory operations
@@ -83,6 +82,9 @@ export const fetchMemoryById = async (id: string): Promise<Memory | null> => {
 
 export const createMemory = async (memory: Omit<Memory, "id" | "createdAt" | "updatedAt">): Promise<Memory | null> => {
   try {
+    // Convert mediaItems to string for storage
+    const mediaItemsStr = memory.mediaItems ? JSON.stringify(memory.mediaItems) : null;
+    
     const { data, error } = await supabase
       .from("memories")
       .insert({
@@ -96,7 +98,7 @@ export const createMemory = async (memory: Omit<Memory, "id" | "createdAt" | "up
         is_private: memory.isPrivate,
         author_id: memory.authorId,
         shared_with: memory.sharedWith,
-        media_items: memory.mediaItems || null, // Store all media items
+        media_items: mediaItemsStr, // Store all media items
       })
       .select()
       .single();
@@ -133,6 +135,9 @@ export const createMemory = async (memory: Omit<Memory, "id" | "createdAt" | "up
 
 export const updateMemory = async (memory: Memory): Promise<Memory | null> => {
   try {
+    // Convert mediaItems to string for storage
+    const mediaItemsStr = memory.mediaItems ? JSON.stringify(memory.mediaItems) : null;
+    
     const { data, error } = await supabase
       .from("memories")
       .update({
@@ -145,7 +150,7 @@ export const updateMemory = async (memory: Memory): Promise<Memory | null> => {
         media_url: memory.mediaUrl,
         is_private: memory.isPrivate,
         shared_with: memory.sharedWith,
-        media_items: memory.mediaItems || null, // Store all media items
+        media_items: mediaItemsStr, // Store all media items
       })
       .eq("id", memory.id)
       .select()
