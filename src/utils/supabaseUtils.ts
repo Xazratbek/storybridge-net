@@ -23,13 +23,13 @@ export const fetchMemories = async (): Promise<Memory[]> => {
       updatedAt: memory.updated_at,
       tags: memory.tags || [],
       category: memory.category || "Uncategorized",
-      mediaType: memory.media_type as 'text' | 'audio' | 'video',
+      mediaType: memory.media_type as 'text' | 'audio' | 'video' | 'image',
       mediaUrl: memory.media_url,
       isPrivate: memory.is_private,
       authorId: memory.author_id,
       sharedWith: memory.shared_with || [],
-      // Parse mediaItems if available
-      mediaItems: memory.media_items ? JSON.parse(memory.media_items) : []
+      // Parse mediaItems if available, using nullish coalescing operator
+      mediaItems: memory.media_items ? JSON.parse(memory.media_items as unknown as string) : []
     }));
   } catch (error: any) {
     toast({
@@ -62,13 +62,13 @@ export const fetchMemoryById = async (id: string): Promise<Memory | null> => {
       updatedAt: data.updated_at,
       tags: data.tags || [],
       category: data.category || "Uncategorized",
-      mediaType: data.media_type as 'text' | 'audio' | 'video',
+      mediaType: data.media_type as 'text' | 'audio' | 'video' | 'image',
       mediaUrl: data.media_url,
       isPrivate: data.is_private,
       authorId: data.author_id,
       sharedWith: data.shared_with || [],
       // Parse mediaItems if available
-      mediaItems: data.media_items ? JSON.parse(data.media_items) : []
+      mediaItems: data.media_items ? JSON.parse(data.media_items as unknown as string) : []
     };
   } catch (error: any) {
     toast({
@@ -116,12 +116,12 @@ export const createMemory = async (memory: Omit<Memory, "id" | "createdAt" | "up
       updatedAt: data.updated_at,
       tags: data.tags || [],
       category: data.category || "Uncategorized",
-      mediaType: data.media_type as 'text' | 'audio' | 'video',
+      mediaType: data.media_type as 'text' | 'audio' | 'video' | 'image',
       mediaUrl: data.media_url,
       isPrivate: data.is_private,
       authorId: data.author_id,
       sharedWith: data.shared_with || [],
-      mediaItems: data.media_items ? JSON.parse(data.media_items) : []
+      mediaItems: data.media_items ? JSON.parse(data.media_items as unknown as string) : []
     };
   } catch (error: any) {
     toast({
@@ -169,12 +169,12 @@ export const updateMemory = async (memory: Memory): Promise<Memory | null> => {
       updatedAt: data.updated_at,
       tags: data.tags || [],
       category: data.category || "Uncategorized",
-      mediaType: data.media_type as 'text' | 'audio' | 'video',
+      mediaType: data.media_type as 'text' | 'audio' | 'video' | 'image',
       mediaUrl: data.media_url,
       isPrivate: data.is_private,
       authorId: data.author_id,
       sharedWith: data.shared_with || [],
-      mediaItems: data.media_items ? JSON.parse(data.media_items) : []
+      mediaItems: data.media_items ? JSON.parse(data.media_items as unknown as string) : []
     };
   } catch (error: any) {
     toast({

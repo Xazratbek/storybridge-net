@@ -39,6 +39,7 @@ export type Database = {
           date: string
           id: string
           is_private: boolean | null
+          media_items: Json | null
           media_type: string | null
           media_url: string | null
           shared_with: string[] | null
@@ -54,6 +55,7 @@ export type Database = {
           date: string
           id?: string
           is_private?: boolean | null
+          media_items?: Json | null
           media_type?: string | null
           media_url?: string | null
           shared_with?: string[] | null
@@ -69,6 +71,7 @@ export type Database = {
           date?: string
           id?: string
           is_private?: boolean | null
+          media_items?: Json | null
           media_type?: string | null
           media_url?: string | null
           shared_with?: string[] | null

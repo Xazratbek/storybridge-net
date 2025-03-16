@@ -7,10 +7,11 @@ export type User = {
 };
 
 export type MediaItem = {
-  type: 'image' | 'audio' | 'video';
-  url: string;
+  type: 'image' | 'audio' | 'video' | 'text';
+  url?: string;
   title?: string;
-}
+  content?: string;
+};
 
 export type Memory = {
   id: string;
@@ -21,7 +22,7 @@ export type Memory = {
   updatedAt: string;
   tags: string[];
   category: string;
-  mediaType: 'text' | 'audio' | 'video';
+  mediaType: 'text' | 'audio' | 'video' | 'image';
   mediaUrl?: string;
   isPrivate: boolean;
   authorId: string;
