@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,6 +27,11 @@ const Navbar = () => {
     queryFn: getCurrentUser,
   });
   
+  // Refetch user data when the component mounts
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+  
   const handleLogout = async () => {
     await logoutUser();
     refetch();
@@ -38,10 +43,10 @@ const Navbar = () => {
   };
   
   return (
-    <nav className="w-full py-4 px-6 flex items-center justify-between bg-memory-paper border-b border-memory-light shadow-sm">
+    <nav className="w-full py-4 px-6 flex items-center justify-between bg-slate-50 border-b border-slate-200 shadow-sm">
       <div className="flex items-center space-x-2">
-        <BookOpen className="h-6 w-6 text-memory-DEFAULT" />
-        <Link to="/" className="text-xl font-serif font-bold text-memory-dark">
+        <BookOpen className="h-6 w-6 text-indigo-600" />
+        <Link to="/" className="text-xl font-serif font-bold text-slate-800">
           Memory Preservation Network
         </Link>
       </div>
@@ -52,7 +57,7 @@ const Navbar = () => {
             <Button 
               variant="ghost" 
               onClick={() => navigate("/dashboard")}
-              className="text-memory-dark hover:text-memory-DEFAULT hover:bg-memory-accent/50"
+              className="text-slate-700 hover:text-indigo-600 hover:bg-slate-100"
             >
               Dashboard
             </Button>
@@ -61,7 +66,7 @@ const Navbar = () => {
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={currentUser.avatar || "/placeholder.svg"} alt={currentUser.name} />
-                    <AvatarFallback className="bg-memory-light text-memory-dark">
+                    <AvatarFallback className="bg-indigo-100 text-indigo-800">
                       {currentUser.name?.substring(0, 2).toUpperCase() || "MN"}
                     </AvatarFallback>
                   </Avatar>
@@ -92,12 +97,12 @@ const Navbar = () => {
         ) : (
           <>
             <Link to="/login">
-              <Button variant="ghost" className="text-memory-dark hover:text-memory-DEFAULT hover:bg-memory-accent/50">
+              <Button variant="ghost" className="text-slate-700 hover:text-indigo-600 hover:bg-slate-100">
                 Login
               </Button>
             </Link>
             <Link to="/register">
-              <Button className="bg-memory-DEFAULT hover:bg-memory-dark text-white">
+              <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
                 Sign Up
               </Button>
             </Link>

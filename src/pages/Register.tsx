@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { registerUser } from "@/utils/authUtils";
-import { BookOpen, AlertCircle } from "lucide-react";
+import { BookOpen, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import Navbar from "@/components/Navbar";
 
@@ -30,20 +30,30 @@ const Register = () => {
       return;
     }
     
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      await registerUser(name, email, password);
+      const user = await registerUser(name, email, password);
+      
+      // Registration successful
       toast({
         title: "Account created!",
-        description: "You have successfully registered and logged in.",
+        description: "Please check your email to verify your account, then you can log in.",
       });
-      navigate("/dashboard");
-    } catch (err) {
+      
+      // Redirect to login page
+      navigate("/login");
+    } catch (err: any) {
+      console.error("Registration error:", err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unexpected error occurred");
+        setError("An unexpected error occurred during registration");
       }
     } finally {
       setIsLoading(false);
@@ -51,13 +61,13 @@ const Register = () => {
   };
   
   return (
-    <div className="min-h-screen bg-memory-paper bg-paper-texture">
+    <div className="min-h-screen bg-slate-50 bg-paper-texture">
       <Navbar />
       <div className="container max-w-md py-12">
         <div className="flex justify-center mb-6">
-          <BookOpen className="h-10 w-10 text-memory-DEFAULT" />
+          <BookOpen className="h-10 w-10 text-indigo-600" />
         </div>
-        <Card className="border-memory-light shadow-md">
+        <Card className="border-slate-200 shadow-md">
           <CardHeader>
             <CardTitle className="text-2xl font-serif text-center">Create an account</CardTitle>
             <CardDescription className="text-center">
@@ -80,6 +90,7 @@ const Register = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
+                  className="border-slate-300"
                 />
               </div>
               <div className="space-y-2">
@@ -91,6 +102,7 @@ const Register = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="border-slate-300"
                 />
               </div>
               <div className="space-y-2">
@@ -101,7 +113,8 @@ const Register = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={8}
+                  minLength={6}
+                  className="border-slate-300"
                 />
               </div>
               <div className="space-y-2">
@@ -112,22 +125,28 @@ const Register = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  className="border-slate-300"
                 />
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
               <Button
                 type="submit"
-                className="w-full bg-memory-DEFAULT hover:bg-memory-dark"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
                 disabled={isLoading}
               >
-                {isLoading ? "Creating account..." : "Sign up"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating account...
+                  </>
+                ) : "Sign up"}
               </Button>
               <div className="text-center text-sm">
                 Already have an account?{" "}
                 <Link
                   to="/login"
-                  className="font-medium text-memory-DEFAULT hover:underline"
+                  className="font-medium text-indigo-600 hover:underline"
                 >
                   Log in
                 </Link>
