@@ -53,3 +53,11 @@ export type Profile = {
   email: string;
   avatar?: string;
 };
+
+export type AppSettings = {
+  theme: 'light' | 'dark' | 'system';
+  language: 'en' | 'ru' | 'uz';
+  notificationsEnabled: boolean;
+  privacyMode: 'private' | 'shared' | 'family';
+  defaultCategory?: string;
+};
