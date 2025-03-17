@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,8 +40,8 @@ const Dashboard = () => {
   
   const [activeTab, setActiveTab] = useState<string>("memories");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedTag, setSelectedTag] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedTag, setSelectedTag] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
   
@@ -126,10 +126,10 @@ const Dashboard = () => {
     }
     
     // Filter by category
-    if (selectedCategory && memory.category !== selectedCategory) return false;
+    if (selectedCategory !== 'all' && memory.category !== selectedCategory) return false;
     
     // Filter by tag
-    if (selectedTag && !memory.tags.includes(selectedTag)) return false;
+    if (selectedTag !== 'all' && !memory.tags.includes(selectedTag)) return false;
     
     return true;
   }).sort((a, b) => {
@@ -145,10 +145,11 @@ const Dashboard = () => {
   );
   
   // Redirect if not authenticated
-  if (!isLoadingUser && !currentUser) {
-    navigate("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!isLoadingUser && !currentUser) {
+      navigate("/login");
+    }
+  }, [currentUser, isLoadingUser, navigate]);
   
   // Handle prompt click
   const handlePromptClick = (promptId: string) => {

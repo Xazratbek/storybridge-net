@@ -58,7 +58,7 @@ const FilterBar = ({
           <SelectValue placeholder="Category" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All Categories</SelectItem>
+          <SelectItem value="all">All Categories</SelectItem>
           {categories?.map((category) => (
             <SelectItem key={category.id} value={category.name}>
               {category.name}
@@ -73,7 +73,7 @@ const FilterBar = ({
           <SelectValue placeholder="Tag" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All Tags</SelectItem>
+          <SelectItem value="all">All Tags</SelectItem>
           {allTags.map((tag) => (
             <SelectItem key={tag} value={tag}>
               {tag}

@@ -89,8 +89,8 @@ export const loginUser = async (
             avatar: data.user.user_metadata.avatar_url
           };
 
-          // Store user in local state
-          localStorage.setItem("currentUser", JSON.stringify(defaultProfile));
+          // Store user in session storage instead of local storage
+          sessionStorage.setItem("currentUser", JSON.stringify(defaultProfile));
           
           toast({
             title: "Welcome!",
@@ -108,8 +108,8 @@ export const loginUser = async (
           avatar: profileData.avatar,
         };
 
-        // Store user in local state
-        localStorage.setItem("currentUser", JSON.stringify(userData));
+        // Store user in session storage instead of local storage
+        sessionStorage.setItem("currentUser", JSON.stringify(userData));
         
         toast({
           title: "Welcome back!",
@@ -145,7 +145,8 @@ export const logoutUser = async (): Promise<void> => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     
-    localStorage.removeItem("currentUser");
+    sessionStorage.removeItem("currentUser");
+    localStorage.removeItem("currentUser"); // Also clear from localStorage if it exists there
     
     toast({
       title: "Logged out",
@@ -163,13 +164,13 @@ export const logoutUser = async (): Promise<void> => {
 
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
-    // First check local storage
-    const storedUser = localStorage.getItem("currentUser");
+    // First check session storage
+    const storedUser = sessionStorage.getItem("currentUser") || localStorage.getItem("currentUser");
     if (storedUser) {
       return JSON.parse(storedUser);
     }
 
-    // If not in local storage, check session
+    // If not in storage, check session with Supabase
     const { data } = await supabase.auth.getSession();
 
     if (data && data.session && data.session.user) {
@@ -192,8 +193,8 @@ export const getCurrentUser = async (): Promise<User | null> => {
           avatar: profileData.avatar,
         };
 
-        // Update local storage
-        localStorage.setItem("currentUser", JSON.stringify(userData));
+        // Update session storage
+        sessionStorage.setItem("currentUser", JSON.stringify(userData));
         
         return userData;
       } catch (error) {
