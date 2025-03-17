@@ -33,8 +33,8 @@ const FilterBar = ({
   allTags
 }: FilterBarProps) => {
   return (
-    <div className="flex items-center gap-2 w-full sm:w-auto">
-      <div className="relative flex-grow">
+    <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
+      <div className="relative flex-grow w-full">
         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
           placeholder="Search memories..."
@@ -52,35 +52,37 @@ const FilterBar = ({
         )}
       </div>
       
-      <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-        <SelectTrigger className="w-[180px] border-purple-200">
-          <Folder className="mr-2 h-4 w-4 text-purple-500" />
-          <SelectValue placeholder="Category" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Categories</SelectItem>
-          {categories?.map((category) => (
-            <SelectItem key={category.id} value={category.name}>
-              {category.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      
-      <Select value={selectedTag} onValueChange={setSelectedTag}>
-        <SelectTrigger className="w-[140px] border-purple-200">
-          <Tag className="mr-2 h-4 w-4 text-purple-500" />
-          <SelectValue placeholder="Tag" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Tags</SelectItem>
-          {allTags.map((tag) => (
-            <SelectItem key={tag} value={tag}>
-              {tag}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+          <SelectTrigger className="w-full sm:w-[180px] border-purple-200">
+            <Folder className="mr-2 h-4 w-4 text-purple-500" />
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {categories?.map((category) => (
+              <SelectItem key={category.id} value={category.name}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        
+        <Select value={selectedTag} onValueChange={setSelectedTag}>
+          <SelectTrigger className="w-full sm:w-[140px] border-purple-200">
+            <Tag className="mr-2 h-4 w-4 text-purple-500" />
+            <SelectValue placeholder="Tag" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Tags</SelectItem>
+            {allTags.map((tag) => (
+              <SelectItem key={tag} value={tag}>
+                {tag}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 };

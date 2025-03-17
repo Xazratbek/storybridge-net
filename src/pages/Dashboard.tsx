@@ -27,7 +27,7 @@ import {
   Trash2
 } from 'lucide-react';
 
-// Import new components
+// Import components
 import FilterBar from '@/components/dashboard/FilterBar';
 import MemoriesTab from '@/components/dashboard/MemoriesTab';
 import PromptsTab from '@/components/dashboard/PromptsTab';
@@ -129,7 +129,7 @@ const Dashboard = () => {
     if (selectedCategory !== 'all' && memory.category !== selectedCategory) return false;
     
     // Filter by tag
-    if (selectedTag !== 'all' && !memory.tags.includes(selectedTag)) return false;
+    if (selectedTag !== 'all' && !memory.tags?.includes(selectedTag)) return false;
     
     return true;
   }).sort((a, b) => {
@@ -185,6 +185,11 @@ const Dashboard = () => {
       </Layout>
     );
   }
+  
+  // For debugging - check if memories are being loaded
+  console.log("Memories loaded:", memories);
+  console.log("Filtered memories:", filteredMemories);
+  console.log("Current filters - category:", selectedCategory, "tag:", selectedTag);
   
   return (
     <Layout>
