@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Prompt } from "@/types";
@@ -17,8 +15,6 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import Navbar from "@/components/Navbar";
 import { useToast } from "@/components/ui/use-toast";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
 import { 
   fetchMemoryById, 
   createMemory, 
@@ -27,6 +23,10 @@ import {
   fetchPrompts,
   fetchCategories
 } from "@/utils/supabaseUtils";
+import { 
+  saveMemoryToMongoDB,
+  fetchMemoryByIdFromMongoDB
+} from "@/utils/mongoDbUtils";
 import { getCurrentUser } from "@/utils/authUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
@@ -83,17 +83,30 @@ const MemoryForm = () => {
     queryKey: ['categories'],
     queryFn: fetchCategories,
   });
-
+  
   // Fetch memory if editing
   const { data: memory, isLoading: isLoadingMemory } = useQuery({
     queryKey: ['memory', id],
-    queryFn: () => id ? fetchMemoryById(id) : null,
+    queryFn: () => id ? fetchMemoryByIdFromMongoDB(id) : null,
     enabled: !!id,
   });
 
   // Create/update memory mutation
   const memoryMutation = useMutation({
     mutationFn: async (formData: any) => {
+      // Get any media files that need to be uploaded
+      const mediaFilesToUpload = mediaItems
+        .filter(item => item.file)
+        .map(item => ({ id: item.id, file: item.file! }));
+      
+      // First attempt to save to MongoDB
+      const mongoResult = await saveMemoryToMongoDB(formData, mediaFilesToUpload);
+      
+      if (!mongoResult) {
+        throw new Error("Failed to save memory to MongoDB");
+      }
+      
+      // Also save basic data to Supabase for redundancy
       if (id) {
         return updateMemory(formData);
       } else {
@@ -221,7 +234,7 @@ const MemoryForm = () => {
       throw error;
     }
   };
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -245,20 +258,17 @@ const MemoryForm = () => {
     }
     
     try {
-      // Upload all media files
-      const itemsWithUrls = await uploadMediaFiles();
-      
       // Prepare data for memory creation/update
       const isPrivate = privacyLevel === "private";
       const sharedWith = privacyLevel === "shared" ? ["PLACEHOLDER_USER_ID"] : [];
       
       // Find the primary media item to use for the main memory record
-      const primaryMedia = itemsWithUrls.find(item => item.url);
+      const primaryMedia = mediaItems.find(item => item.url || item.file);
       
       const memoryData = {
-        id: id || "",
+        id: id || crypto.randomUUID(),
         title,
-        content: content || itemsWithUrls.filter(item => item.type === "text")
+        content: content || mediaItems.filter(item => item.type === "text")
           .map(item => item.content)
           .join("\n\n"),
         date: date ? date.toISOString() : new Date().toISOString(),
@@ -269,16 +279,14 @@ const MemoryForm = () => {
         isPrivate,
         authorId: currentUser.id,
         sharedWith,
-        createdAt: "",
-        updatedAt: "",
-        // Store all media items in a JSON structure for retrieval
-        mediaItems: JSON.stringify(
-          itemsWithUrls.map(item => ({
-            type: item.type,
-            url: item.url,
-            content: item.content
-          }))
-        )
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        mediaItems: mediaItems.map(item => ({
+          id: item.id,
+          type: item.type,
+          url: item.url,
+          content: item.content
+        }))
       };
       
       memoryMutation.mutate(memoryData);

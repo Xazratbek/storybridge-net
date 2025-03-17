@@ -1,163 +1,157 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Memory } from '@/types';
-import { Edit, Trash, Lock, Users, Calendar } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { Edit, Trash2, Eye, Calendar, Bookmark, Lock, Tag, Music, Film, Image } from 'lucide-react';
+import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+import { getMediaBinaryById } from '@/utils/mongoDbUtils';
 
-interface MemoryCardProps {
+type MemoryCardProps = {
   memory: Memory;
-  onDelete?: (id: string) => void;
-  onClick?: (memory: Memory) => void;
-}
+  onDelete: (id: string) => void;
+};
 
-const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onDelete, onClick }) => {
-  const { id, title, content, date, tags, category, mediaType, mediaUrl, isPrivate } = memory;
+const MemoryCard = ({ memory, onDelete }: MemoryCardProps) => {
+  const navigate = useNavigate();
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   
-  const formattedDate = date ? format(parseISO(date), 'MMM d, yyyy') : null;
-  const truncatedContent = content && content.length > 150 
-    ? `${content.substring(0, 150)}...` 
-    : content;
+  // Convert binary data to URL for display if needed
+  useEffect(() => {
+    const loadMediaBinary = async () => {
+      if (memory.mediaItems && memory.mediaItems.length > 0) {
+        const firstMedia = memory.mediaItems[0];
+        
+        if (firstMedia.url) {
+          setMediaUrl(firstMedia.url);
+        } else if (firstMedia.id) {
+          const binary = await getMediaBinaryById(firstMedia.id);
+          if (binary) {
+            // Convert binary data to blob URL
+            const blob = new Blob([binary.data.buffer], { type: binary.contentType });
+            const url = URL.createObjectURL(blob);
+            setMediaUrl(url);
+            
+            // Clean up the blob URL when component unmounts
+            return () => {
+              URL.revokeObjectURL(url);
+            };
+          }
+        }
+      } else if (memory.mediaUrl) {
+        setMediaUrl(memory.mediaUrl);
+      }
+    };
+    
+    loadMediaBinary();
+  }, [memory]);
+
+  const getMediaIcon = (mediaType: string) => {
+    switch (mediaType) {
+      case 'audio':
+        return <Music className="mr-2 h-4 w-4" />;
+      case 'video':
+        return <Film className="mr-2 h-4 w-4" />;
+      case 'image':
+        return <Image className="mr-2 h-4 w-4" />;
+      default:
+        return <BookText className="mr-2 h-4 w-4" />;
+    }
+  };
+
+  const formatDate = (dateString: string): string => {
+    try {
+      return format(new Date(dateString), 'MMMM d, yyyy');
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return 'Unknown Date';
+    }
+  };
   
-  // Extract media items if available
-  const mediaItems = memory.mediaItems || [];
-  
-  // Get first image for preview if available
-  const previewImage = mediaItems.find((item) => item.type === 'image' && item.url)?.url;
-  
-  // Check if memory has audio or video
-  const hasAudio = mediaItems.some((item) => item.type === 'audio' && item.url);
-  const hasVideo = mediaItems.some((item) => item.type === 'video' && item.url);
+  // Render the media based on mediaType
+  const renderMedia = () => {
+    if (!mediaUrl) return null;
+    
+    if (memory.mediaType === 'image') {
+      return (
+        <div className="relative aspect-video rounded-md overflow-hidden mb-3">
+          <img 
+            src={mediaUrl} 
+            alt={memory.title} 
+            className="w-full h-full object-cover"
+          />
+        </div>
+      );
+    } else if (memory.mediaType === 'audio') {
+      return (
+        <div className="mb-3">
+          <audio controls className="w-full">
+            <source src={mediaUrl} type="audio/mpeg" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      );
+    } else if (memory.mediaType === 'video') {
+      return (
+        <div className="relative aspect-video rounded-md overflow-hidden mb-3">
+          <video controls className="w-full h-full object-cover">
+            <source src={mediaUrl} type="video/mp4" />
+            Your browser does not support the video element.
+          </video>
+        </div>
+      );
+    }
+    
+    return null;
+  };
   
   return (
-    <Card 
-      className="memory-card h-full flex flex-col transition-all duration-200 hover:shadow-lg"
-      onClick={() => onClick && onClick(memory)}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
-          <CardTitle className="text-xl font-serif text-indigo-800 line-clamp-2">
-            {title}
-          </CardTitle>
-          {isPrivate && (
-            <Lock className="h-4 w-4 text-indigo-500 shrink-0" />
+    <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-purple-100">
+      <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+        <CardTitle className="text-xl font-medium text-purple-800">{memory.title}</CardTitle>
+        <div className="flex items-center space-x-2">
+          {memory.isPrivate ? (
+            <Lock className="h-4 w-4 text-gray-500" title="Private Memory" />
+          ) : (
+            <Eye className="h-4 w-4 text-gray-500" title="Public Memory" />
           )}
-        </div>
-        <div className="flex items-center text-sm text-indigo-600 mt-1">
-          <Calendar className="h-3 w-3 mr-1" />
-          {formattedDate}
         </div>
       </CardHeader>
-      
-      <CardContent className="flex-grow pb-4">
-        {previewImage && (
-          <div className="aspect-video w-full mb-3 rounded-md overflow-hidden bg-indigo-50">
-            <img 
-              src={previewImage} 
-              alt={title} 
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-        
-        {!previewImage && mediaUrl && mediaType === 'image' && (
-          <div className="aspect-video w-full mb-3 rounded-md overflow-hidden bg-indigo-50">
-            <img 
-              src={mediaUrl} 
-              alt={title} 
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-        
-        <p className="text-gray-600 line-clamp-3 mb-3">
-          {truncatedContent || 'No description provided.'}
-        </p>
-        
-        <div className="flex flex-wrap gap-1 mb-2">
-          {hasAudio && (
-            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
-              Audio
-            </span>
-          )}
-          {hasVideo && (
-            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
-              Video
-            </span>
-          )}
-          {category && category !== 'Uncategorized' && (
-            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
-              {category}
-            </span>
-          )}
-        </div>
-        
-        <div className="flex flex-wrap gap-1">
-          {tags && tags.slice(0, 3).map((tag, index) => (
-            <span 
-              key={index}
-              className="bg-indigo-50 text-indigo-600 text-xs px-2 py-0.5 rounded-full border border-indigo-100"
-            >
+      <CardContent className="py-3 text-gray-700">
+        {renderMedia()}
+        <p>{memory.content.length > 100 ? `${memory.content.substring(0, 100)}...` : memory.content}</p>
+        <div className="flex flex-wrap mt-2">
+          {memory.tags.map((tag) => (
+            <Badge key={tag} variant="secondary" className="mr-1 mb-1 text-purple-600 bg-purple-50 border-purple-200">
+              <Tag className="mr-1 h-3 w-3" />
               {tag}
-            </span>
+            </Badge>
           ))}
-          {tags && tags.length > 3 && (
-            <span className="text-xs text-indigo-400">
-              +{tags.length - 3} more
-            </span>
-          )}
         </div>
       </CardContent>
-      
-      <CardFooter className="pt-2 border-t border-indigo-100">
-        <div className="flex justify-between w-full">
-          <Button 
-            variant="ghost" 
+      <CardFooter className="flex justify-between items-center py-3">
+        <div className="flex items-center text-gray-500">
+          <Calendar className="mr-2 h-4 w-4" />
+          <span className="text-sm">{formatDate(memory.date)}</span>
+        </div>
+        <div className="flex space-x-2">
+          <Button
+            variant="ghost"
             size="sm"
-            className="text-indigo-700 hover:bg-indigo-50"
-            asChild
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
+            onClick={() => navigate(`/memory/edit/${memory.id}`)}
+            className="text-blue-500 hover:bg-blue-50"
           >
-            <Link to={`/memory/${id}`}>
-              View
-            </Link>
+            <Edit className="h-4 w-4" />
           </Button>
-          
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-indigo-700 hover:bg-indigo-50"
-              asChild
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-            >
-              <Link to={`/memory/edit/${id}`}>
-                <Edit className="h-4 w-4" />
-                <span className="sr-only">Edit</span>
-              </Link>
-            </Button>
-            
-            {onDelete && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-red-600 hover:bg-red-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(id);
-                }}
-              >
-                <Trash className="h-4 w-4" />
-                <span className="sr-only">Delete</span>
-              </Button>
-            )}
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(memory.id)}
+            className="text-red-500 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </CardFooter>
     </Card>

@@ -1,8 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,17 +16,26 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { Card, CardContent } from "@/components/ui/card";
 import Layout from '@/components/Layout';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchMemories, deleteMemory, fetchPrompts, fetchCategories } from "@/utils/supabaseUtils";
-import { getCurrentUser } from "@/utils/authUtils";
-import { Memory } from '@/types';
+import { getCurrentUser } from '@/utils/authUtils';
 import { 
-  Plus, 
-  BookText, 
-  Lightbulb, 
-  Clock, 
+  fetchCategories,
+  fetchMemories,
+  deleteMemory,
+  fetchPrompts
+} from '@/utils/supabaseUtils';
+import { 
+  fetchMemoriesFromMongoDB, 
+  deleteMemoryFromMongoDB 
+} from '@/utils/mongoDbUtils';
+import { Memory, Category } from '@/types';
+import {
+  Calendar,
+  PlusCircle,
+  BookText,
   Trash2
 } from 'lucide-react';
 
@@ -32,201 +44,139 @@ import FilterBar from '@/components/dashboard/FilterBar';
 import MemoriesTab from '@/components/dashboard/MemoriesTab';
 import PromptsTab from '@/components/dashboard/PromptsTab';
 import TimelineTab from '@/components/dashboard/TimelineTab';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const [activeTab, setActiveTab] = useState<string>("memories");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedTag, setSelectedTag] = useState<string>("all");
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedTag, setSelectedTag] = useState('all');
+  const [deleteMemoryId, setDeleteMemoryId] = useState<string | null>(null);
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   
   // Fetch current user
   const { data: currentUser, isLoading: isLoadingUser } = useQuery({
     queryKey: ['currentUser'],
     queryFn: getCurrentUser,
   });
-  
-  // Fetch memories
-  const { 
-    data: memories, 
-    isLoading: isLoadingMemories,
-    isError: isErrorMemories,
-    error: memoriesError
-  } = useQuery({
-    queryKey: ['memories'],
-    queryFn: fetchMemories,
-    enabled: !!currentUser,
-  });
-  
-  // Fetch prompts
-  const { 
-    data: prompts, 
-    isLoading: isLoadingPrompts 
-  } = useQuery({
-    queryKey: ['prompts'],
-    queryFn: fetchPrompts,
-  });
 
-  // Fetch categories
-  const { 
-    data: categories, 
-    isLoading: isLoadingCategories 
-  } = useQuery({
-    queryKey: ['categories'],
-    queryFn: fetchCategories,
-  });
-  
-  // Delete memory mutation
-  const deleteMutation = useMutation({
-    mutationFn: deleteMemory,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['memories'] });
-      toast({
-        title: "Memory deleted",
-        description: "Your memory has been successfully deleted."
-      });
-      setDeleteId(null);
-      setIsDeleteDialogOpen(false);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete memory",
-        variant: "destructive",
-      });
-    },
-  });
-  
-  // Handle delete memory
-  const handleDeleteIntent = (id: string) => {
-    setDeleteId(id);
-    setIsDeleteDialogOpen(true);
-  };
-  
-  const confirmDelete = () => {
-    if (deleteId) {
-      deleteMutation.mutate(deleteId);
-    }
-  };
-  
-  // Filter and sort memories
-  const filteredMemories = memories?.filter(memory => {
-    // Filter by author
-    if (currentUser && memory.authorId !== currentUser.id) return false;
-    
-    // Filter by search query
-    if (searchQuery && !memory.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !memory.content?.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    
-    // Filter by category
-    if (selectedCategory !== 'all' && memory.category !== selectedCategory) return false;
-    
-    // Filter by tag
-    if (selectedTag !== 'all' && !memory.tags?.includes(selectedTag)) return false;
-    
-    return true;
-  }).sort((a, b) => {
-    // Sort by date descending
-    return new Date(b.date).getTime() - new Date(a.date).getTime();
-  }) || [];
-  
-  // Extract all unique tags from memories
-  const allTags = Array.from(
-    new Set(
-      memories?.flatMap(memory => memory.tags || []) || []
-    )
-  );
-  
   // Redirect if not authenticated
   useEffect(() => {
     if (!isLoadingUser && !currentUser) {
       navigate("/login");
     }
   }, [currentUser, isLoadingUser, navigate]);
-  
-  // Handle prompt click
-  const handlePromptClick = (promptId: string) => {
-    navigate(`/memory/new/${promptId}`);
+
+  // Fetch memories from MongoDB
+  const { data: memories, isLoading: isLoadingMemories } = useQuery({
+    queryKey: ['memories'],
+    queryFn: fetchMemoriesFromMongoDB,
+    enabled: !!currentUser,
+  });
+
+  // Fetch categories
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  });
+
+  // Fetch prompts
+  const { data: prompts } = useQuery({
+    queryKey: ['prompts'],
+    queryFn: fetchPrompts,
+  });
+
+  // Get all unique tags from memories
+  const allTags = memories
+    ? Array.from(new Set(memories.flatMap(memory => memory.tags)))
+    : [];
+
+  // Delete memory mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // Delete from both MongoDB and Supabase for redundancy
+      const mongoResult = await deleteMemoryFromMongoDB(id);
+      const supabaseResult = await deleteMemory(id);
+      
+      if (!mongoResult && !supabaseResult) {
+        throw new Error("Failed to delete memory from both databases");
+      }
+      
+      return true;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Memory deleted",
+        description: "Your memory has been deleted.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['memories'] });
+      setDeleteMemoryId(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error deleting memory",
+        description: error.message || "Failed to delete memory",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmDeleteMemory = (id: string) => {
+    setDeleteMemoryId(id);
+    setIsDeleteConfirmationOpen(true);
   };
-  
-  // Loading state
-  if (isLoadingUser || isLoadingMemories || isLoadingPrompts) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-purple-200 rounded w-48 mx-auto"></div>
-            <div className="h-4 bg-purple-100 rounded w-64"></div>
-            <div className="h-32 bg-purple-100 rounded-lg w-80"></div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-  
-  // Error state
-  if (isErrorMemories) {
-    return (
-      <Layout>
-        <div className="flex flex-col justify-center items-center h-64">
-          <h2 className="text-2xl font-bold text-red-600 mb-2">Error Loading Memories</h2>
-          <p className="text-gray-600 mb-4">{memoriesError?.message || "An error occurred while loading your memories."}</p>
-          <Button onClick={() => queryClient.invalidateQueries({ queryKey: ['memories'] })}>
-            Try Again
-          </Button>
-        </div>
-      </Layout>
-    );
-  }
-  
+
+  const cancelDeleteMemory = () => {
+    setDeleteMemoryId(null);
+    setIsDeleteConfirmationOpen(false);
+  };
+
+  const handleDeleteMemory = async () => {
+    if (deleteMemoryId) {
+      deleteMutation.mutate(deleteMemoryId);
+      setIsDeleteConfirmationOpen(false);
+    }
+  };
+
+  // Filter memories based on search query, category, and tags
+  const filteredMemories = React.useMemo(() => {
+    if (!memories) return [];
+
+    return memories.filter(memory => {
+      const searchMatch = memory.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          memory.content.toLowerCase().includes(searchQuery.toLowerCase());
+      const categoryMatch = selectedCategory === 'all' || memory.category === selectedCategory;
+      const tagMatch = selectedTag === 'all' || memory.tags.includes(selectedTag);
+
+      return searchMatch && categoryMatch && tagMatch;
+    });
+  }, [memories, searchQuery, selectedCategory, selectedTag]);
+
   // For debugging - check if memories are being loaded
-  console.log("Memories loaded:", memories);
-  console.log("Filtered memories:", filteredMemories);
-  console.log("Current filters - category:", selectedCategory, "tag:", selectedTag);
+  console.log("Memories loaded from MongoDB:", memories);
   
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-purple-800 mb-2 font-serif">Welcome, {currentUser?.name}</h1>
-          <p className="text-gray-600">Preserve your memories for future generations.</p>
-        </div>
-        
-        <Button 
-          onClick={() => navigate("/memory/new")}
-          className="bg-purple-600 hover:bg-purple-700"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Memory
-        </Button>
-      </div>
-      
-      <Tabs defaultValue="memories" value={activeTab} onValueChange={setActiveTab}>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <TabsList className="bg-purple-100">
-            <TabsTrigger value="memories" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-              <BookText className="mr-2 h-4 w-4" />
-              My Memories
-            </TabsTrigger>
-            <TabsTrigger value="prompts" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-              <Lightbulb className="mr-2 h-4 w-4" />
-              Memory Prompts
-            </TabsTrigger>
-            <TabsTrigger value="timeline" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-              <Clock className="mr-2 h-4 w-4" />
-              Timeline
-            </TabsTrigger>
-          </TabsList>
-          
-          {activeTab === "memories" && (
-            <FilterBar 
+      <div className="container py-10">
+        <Card className="shadow-md border-memory-light">
+          <CardContent className="p-6">
+            <div className="mb-6 flex justify-between items-center">
+              <h1 className="text-2xl font-semibold text-purple-800 font-serif">
+                Your Memories
+              </h1>
+              <Button
+                onClick={() => navigate("/memory/new")}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add New Memory
+              </Button>
+            </div>
+
+            <FilterBar
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               selectedCategory={selectedCategory}
@@ -236,48 +186,67 @@ const Dashboard = () => {
               categories={categories}
               allTags={allTags}
             />
-          )}
-        </div>
-        
-        <TabsContent value="memories" className="mt-0">
-          <MemoriesTab 
-            memories={filteredMemories} 
-            onDeleteIntent={handleDeleteIntent} 
-          />
-        </TabsContent>
-        
-        <TabsContent value="prompts" className="mt-0">
-          <PromptsTab 
-            prompts={prompts || []} 
-            onPromptClick={handlePromptClick} 
-          />
-        </TabsContent>
-        
-        <TabsContent value="timeline" className="mt-0">
-          <TimelineTab memories={filteredMemories} />
-        </TabsContent>
-      </Tabs>
-      
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the memory and all associated data.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
+            <Tabs defaultValue="memories" className="mt-6">
+              <TabsList>
+                <TabsTrigger value="memories" className="data-[state=active]:bg-purple-100 text-purple-600">
+                  <BookText className="mr-2 h-4 w-4" />
+                  Memories
+                </TabsTrigger>
+                <TabsTrigger value="timeline" className="data-[state=active]:bg-purple-100 text-purple-600">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Timeline
+                </TabsTrigger>
+                <TabsTrigger value="prompts" className="data-[state=active]:bg-purple-100 text-purple-600">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Prompts
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="memories" className="mt-4">
+                <MemoriesTab
+                  memories={filteredMemories}
+                  onDeleteIntent={confirmDeleteMemory}
+                />
+              </TabsContent>
+              <TabsContent value="timeline" className="mt-4">
+                <TimelineTab memories={filteredMemories} />
+              </TabsContent>
+              <TabsContent value="prompts" className="mt-4">
+                <PromptsTab prompts={prompts || []} />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={isDeleteConfirmationOpen} onOpenChange={setIsDeleteConfirmationOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. Are you sure you want to delete this memory?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={cancelDeleteMemory}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteMemory}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? (
+                  <>
+                    Deleting <span className="animate-pulse">...</span>
+                  </>
+                ) : (
+                  <>
+                    Delete <Trash2 className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </Layout>
   );
 };
