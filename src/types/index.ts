@@ -7,6 +7,7 @@ export type User = {
 };
 
 export type MediaItem = {
+  id?: string; // Added id property
   type: 'image' | 'audio' | 'video' | 'text';
   url?: string;
   title?: string;

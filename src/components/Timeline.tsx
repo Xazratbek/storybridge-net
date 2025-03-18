@@ -41,6 +41,12 @@ const Timeline = ({ memories, onMemoryClick }: TimelineProps) => {
     }
   };
   
+  // Dummy handler for delete action
+  const handleDeleteMemory = (id: string) => {
+    console.log("Delete memory requested for:", id);
+    // In a real implementation, you would handle deletion here or pass it up
+  };
+  
   return (
     <div className="space-y-8 py-4">
       {years.length === 0 ? (
@@ -74,7 +80,7 @@ const Timeline = ({ memories, onMemoryClick }: TimelineProps) => {
                     </div>
                     <MemoryCard 
                       memory={memory}
-                      onClick={onMemoryClick}
+                      onDelete={handleDeleteMemory}
                     />
                   </div>
                 ))}

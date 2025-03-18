@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Memory } from '@/types';
-import { Edit, Trash2, Eye, Calendar, Bookmark, Lock, Tag, Music, Film, Image } from 'lucide-react';
+import { Edit, Trash2, Eye, Calendar, Bookmark, Lock, Tag, Music, Film, Image, BookOpen } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { getMediaBinaryById } from '@/utils/mongoDbUtils';
@@ -56,7 +57,7 @@ const MemoryCard = ({ memory, onDelete }: MemoryCardProps) => {
       case 'image':
         return <Image className="mr-2 h-4 w-4" />;
       default:
-        return <BookText className="mr-2 h-4 w-4" />;
+        return <BookOpen className="mr-2 h-4 w-4" />; // Changed BookText to BookOpen
     }
   };
 
@@ -112,9 +113,9 @@ const MemoryCard = ({ memory, onDelete }: MemoryCardProps) => {
         <CardTitle className="text-xl font-medium text-purple-800">{memory.title}</CardTitle>
         <div className="flex items-center space-x-2">
           {memory.isPrivate ? (
-            <Lock className="h-4 w-4 text-gray-500" title="Private Memory" />
+            <Lock className="h-4 w-4 text-gray-500" aria-label="Private Memory" />
           ) : (
-            <Eye className="h-4 w-4 text-gray-500" title="Public Memory" />
+            <Eye className="h-4 w-4 text-gray-500" aria-label="Public Memory" />
           )}
         </div>
       </CardHeader>
@@ -122,7 +123,7 @@ const MemoryCard = ({ memory, onDelete }: MemoryCardProps) => {
         {renderMedia()}
         <p>{memory.content.length > 100 ? `${memory.content.substring(0, 100)}...` : memory.content}</p>
         <div className="flex flex-wrap mt-2">
-          {memory.tags.map((tag) => (
+          {memory.tags && memory.tags.map((tag) => (
             <Badge key={tag} variant="secondary" className="mr-1 mb-1 text-purple-600 bg-purple-50 border-purple-200">
               <Tag className="mr-1 h-3 w-3" />
               {tag}

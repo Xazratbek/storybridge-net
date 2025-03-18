@@ -5,10 +5,16 @@ import { Prompt } from '@/types';
 
 type PromptsTabProps = {
   prompts: Prompt[];
-  onPromptClick: (promptId: string) => void;
+  onPromptClick?: (promptId: string) => void; // Made optional with a default value
 };
 
-const PromptsTab = ({ prompts, onPromptClick }: PromptsTabProps) => {
+const PromptsTab = ({ prompts, onPromptClick = () => {} }: PromptsTabProps) => {
+  const handlePromptClick = (prompt: Prompt) => {
+    if (onPromptClick) {
+      onPromptClick(prompt.id);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm p-6 border border-purple-100">
       <h2 className="text-xl font-medium text-purple-800 mb-4 font-serif">Memory Prompts</h2>
@@ -21,7 +27,7 @@ const PromptsTab = ({ prompts, onPromptClick }: PromptsTabProps) => {
           <PromptCard 
             key={prompt.id} 
             prompt={prompt} 
-            onClick={() => onPromptClick(prompt.id)}
+            onClick={handlePromptClick}
           />
         ))}
       </div>
